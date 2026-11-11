@@ -551,5 +551,111 @@ check("coverage is close to 80%", lambda: 0.70 <= coverage <= 0.92)
 ''',
         hint="`scores = np.abs(y[calib] - model.predict(X[calib]))`, then `np.quantile(scores, np.ceil((n + 1) * 0.8) / n)`.",
     ),
+    Exercise(
+        id="lab-11-pca-latent-space", level="Beginner", title="Build a latent space with PCA",
+        goal="Compress seven linebacker stats into two hidden dimensions and find out which stats define each one.",
+        concepts=["PCA", "standardization", "loadings"], concept_ids=["latent-spaces"],
+        starter='''import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from academy.labs import check
+from academy.data import make_defensive_profiles, PROFILE_FEATURES
+
+df = make_defensive_profiles()                      # SIMULATED
+lb = df[(df["position_group"] == "LB") & (df["snaps"] >= 150)]
+
+# TODO 1: standardize lb[PROFILE_FEATURES]
+Z = None
+# TODO 2: fit PCA with 2 components on Z
+pca = None
+# TODO 3: the stat with the biggest (absolute) loading on dimension 1
+top_stat = None
+
+print("Top stat on dimension 1:", top_stat)
+
+# ---- self-check ----
+check("standardized (mean ~0)", lambda: abs(Z.mean()) < 1e-9)
+check("2 components kept", lambda: pca.n_components_ == 2)
+check("top stat found", lambda: top_stat in PROFILE_FEATURES)
+''',
+        solution='''import pandas as pd
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from academy.labs import check
+from academy.data import make_defensive_profiles, PROFILE_FEATURES
+
+df = make_defensive_profiles()
+lb = df[(df["position_group"] == "LB") & (df["snaps"] >= 150)]
+
+Z = StandardScaler().fit_transform(lb[PROFILE_FEATURES])
+pca = PCA(n_components=2).fit(Z)
+load = pd.Series(pca.components_[0], index=PROFILE_FEATURES)
+top_stat = load.abs().idxmax()
+
+print("Variation kept:", pca.explained_variance_ratio_.round(2))
+print("Dimension 1 loadings:\\n", load.round(2).sort_values().to_string())
+print("Top stat on dimension 1:", top_stat)
+
+check("standardized (mean ~0)", lambda: abs(Z.mean()) < 1e-9)
+check("2 components kept", lambda: pca.n_components_ == 2)
+check("top stat found", lambda: top_stat in PROFILE_FEATURES)
+''',
+        hint="`StandardScaler().fit_transform(...)`, `PCA(n_components=2).fit(Z)`, then `pd.Series(pca.components_[0], index=PROFILE_FEATURES).abs().idxmax()`.",
+    ),
+    Exercise(
+        id="lab-12-autoencoder-bottleneck", level="Advanced", title="How small can the code be? (autoencoder)",
+        goal="Train autoencoders with codes of size 1, 2 and 3 and compare their rebuild error with PCA at the same size.",
+        concepts=["autoencoder", "bottleneck", "reconstruction error"], concept_ids=["autoencoders"],
+        starter='''import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.neural_network import MLPRegressor
+from sklearn.preprocessing import StandardScaler
+from academy.labs import check
+from academy.data import make_defensive_profiles, PROFILE_FEATURES
+
+df = make_defensive_profiles()                      # SIMULATED
+db = df[(df["position_group"] == "DB") & (df["snaps"] >= 150)]
+Z = StandardScaler().fit_transform(db[PROFILE_FEATURES])
+
+results = {}                                        # code size -> (autoencoder error, PCA error)
+for size in (1, 2, 3):
+    # TODO: train MLPRegressor(hidden_layer_sizes=(5, size, 5), activation="tanh", max_iter=3000, random_state=0) on Z -> Z
+    # TODO: compute both rebuild errors as mean squared error and store them in results[size]
+    pass
+
+for size, (ae, pc) in results.items():
+    print(f"code size {size}: autoencoder {ae:.3f}  PCA {pc:.3f}")
+
+# ---- self-check ----
+check("three sizes tried", lambda: len(results) == 3)
+check("bigger codes rebuild better (PCA)", lambda: results[1][1] > results[2][1] > results[3][1])
+''',
+        solution='''import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.neural_network import MLPRegressor
+from sklearn.preprocessing import StandardScaler
+from academy.labs import check
+from academy.data import make_defensive_profiles, PROFILE_FEATURES
+
+df = make_defensive_profiles()
+db = df[(df["position_group"] == "DB") & (df["snaps"] >= 150)]
+Z = StandardScaler().fit_transform(db[PROFILE_FEATURES])
+
+results = {}
+for size in (1, 2, 3):
+    ae = MLPRegressor(hidden_layer_sizes=(5, size, 5), activation="tanh", max_iter=3000, random_state=0).fit(Z, Z)
+    pca = PCA(size).fit(Z)
+    results[size] = (np.mean((ae.predict(Z) - Z) ** 2),
+                     np.mean((pca.inverse_transform(pca.transform(Z)) - Z) ** 2))
+
+for size, (ae, pc) in results.items():
+    print(f"code size {size}: autoencoder {ae:.3f}  PCA {pc:.3f}")
+print("Bigger codes rebuild better. Does the autoencoder ever clearly beat PCA on 7 stats?")
+
+check("three sizes tried", lambda: len(results) == 3)
+check("bigger codes rebuild better (PCA)", lambda: results[1][1] > results[2][1] > results[3][1])
+''',
+        hint="Inside the loop: `ae = MLPRegressor(...).fit(Z, Z)`, `pca = PCA(size).fit(Z)`, then mean squared differences between `ae.predict(Z)` and Z, and between `pca.inverse_transform(pca.transform(Z))` and Z.",
+    ),
 ]
 

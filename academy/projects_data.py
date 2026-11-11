@@ -72,63 +72,43 @@ PROJECTS = [
 
     # ------------------------------------------------------------------ LEVEL 2
     Project(
-        id="p2-archetypes", level=2, slot="", title="College Football Player Archetype Discovery",
-        objective="Discover player types from statistical profiles, visualize them, and compare them with conventional position labels.",
-        concept_ids=["latent-spaces", "k-means", "autoencoders", "vaes"], dataset_id="player_profiles",
-        psfal="Archetypes can describe roster composition (how many run-stopping vs pass-rushing linemen a program develops) and give a vocabulary for recruiting fits. Clusters are **descriptive discoveries**: they say who looks similar, not who will succeed.",
+        id="p2-archetypes", level=2, slot="", status="built", title="College Football Player Archetype Discovery",
+        objective="Discover player types from statistical profiles, see them on a map, compare them with listed positions, and test whether they add anything to next-season prediction.",
+        concept_ids=["latent-spaces", "k-means", "autoencoders", "vaes", "time-based-cv"], dataset_id="player_profiles",
+        psfal="""
+**The academy is separate from PSFAL and never changes it.**
+
+- **Descriptive value:** archetype counts by position group give a clear language for roster composition and recruiting fits ("we sign run stoppers, we need penetrators").
+- **Clusters are descriptive discoveries, not predictive models.** Models 9 and 9b showed richer inputs can fail to beat "same as last season". Archetypes are richer inputs, so the Production Candidate test checks exactly that: do they improve on *this season's production + position*?
+- **Your rule:** an archetype feature goes on your site only if it beats that simple baseline on a test set fixed in advance.
+""",
         learning=Track(
-            summary="Cluster simulated edge defenders, choose k, project to 2-D, and cross-tabulate clusters against listed positions.",
-            steps=["Select features and justify each one.", "Standardize every feature.",
-                   "Run K-means for k = 2..6 and compare silhouette scores.", "Profile each cluster (feature means).",
-                   "Reduce to 2-D with PCA and plot the clusters.", "Cross-tabulate clusters vs listed position.",
-                   "Check stability across random seeds."],
-            code='''import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
-from sklearn.metrics import adjusted_rand_score, silhouette_score
-from sklearn.preprocessing import StandardScaler
-from academy.data import make_edge_defenders
-
-edges = make_edge_defenders()                       # SIMULATED (hidden true_archetype exists only here)
-features = ["pressure_rate", "run_stop_rate", "tackles_per_game", "coverage_snap_pct", "weight_lbs"]
-Z = StandardScaler().fit_transform(edges[features])
-
-scores = {k: silhouette_score(Z, KMeans(k, n_init=10, random_state=0).fit_predict(Z)) for k in range(2, 7)}
-k = max(scores, key=scores.get)
-print("Silhouette by k:", {kk: round(v, 3) for kk, v in scores.items()}, "-> k =", k)
-
-edges["cluster"] = KMeans(k, n_init=10, random_state=0).fit_predict(Z)
-print("\\nCluster profiles:\\n", edges.groupby("cluster")[features].mean().round(2).to_string())
-print("\\nClusters vs LISTED position (what a roster sheet says):")
-print(pd.crosstab(edges["cluster"], edges["listed_position"]))
-print("\\nStability across seeds (ARI):",
-      round(adjusted_rand_score(edges["cluster"], KMeans(k, n_init=10, random_state=9).fit_predict(Z)), 3))
-
-pc = PCA(2).fit_transform(Z)
-fig, ax = plt.subplots()
-for c in sorted(edges["cluster"].unique()):
-    m = edges["cluster"] == c
-    ax.scatter(pc[m, 0], pc[m, 1], s=22, label=f"cluster {c}")
-ax.set_xlabel("PC 1"); ax.set_ylabel("PC 2"); ax.legend(); ax.set_title("Edge archetypes in 2-D (simulated)")
-''',
-            limitations=["150 simulated players with cleanly separated types; real profiles overlap far more.",
-                         "Thousands of real player observations are needed before clusters are stable.",
-                         "Clusters are descriptive. They do not predict success without separate validation."],
+            summary="Pick a position group and features, standardize, choose k, see the clusters on a 2-D map, name them from their profiles, and compare them with listed positions.",
+            steps=["Choose a position group and a minimum-snaps filter (low-snap stats are noise).",
+                   "Select features and say why each belongs.", "Look at standardized vs raw scales.",
+                   "Choose k using silhouette AND stability AND football meaning.",
+                   "Read the cluster profiles and name each archetype.",
+                   "Compare clusters with listed positions; note where they disagree.",
+                   "Write down one thing the clusters describe and one thing they can't tell you."],
+            limitations=["Simulated data: three hidden styles per position group, cleaner than real football.",
+                         "Per-snap rates from low-snap seasons are mostly noise; the filter matters.",
+                         "K-means assumes round, similar-sized groups; real roles may form a spectrum.",
+                         "Clusters are descriptive. They say who looks alike, not who will succeed."],
         ),
         production=Track(
-            summary="An archetype model is only a production candidate if the archetypes ADD predictive value to a downstream question.",
-            steps=["Fix a downstream outcome (e.g., next-season production) and its metric first.",
-                   "Fit clusters on earlier seasons only.", "Compare a baseline model with and without archetype features on later seasons.",
-                   "Check cluster stability over seeds and seasons."],
-            baseline="Downstream model using position label only.",
-            metric="Out-of-sample error on the downstream outcome (fixed in advance).",
-            validation="Clusters and models fit on earlier seasons, evaluated on later seasons.",
-            gates=STANDARD_GATES + ["Clusters stable across random seeds and seasons (ARI reported)"],
+            summary="Test whether archetypes add predictive value: do they improve next-season production forecasts beyond this season's production + listed position?",
+            steps=["Upload real profiles with production and next_production, and mark them real.",
+                   "Choose k and the features BEFORE running (that's the registration).",
+                   "Run the rolling-origin test; every fold refits scaler, K-means and regressions on earlier seasons.",
+                   "Read every gate; one failure means Learning Lab only."],
+            baseline="Ridge regression on this season's production + listed position (no archetypes). 'Same as last season' is also shown.",
+            metric="Mean absolute error of next-season production (rolling origin by season).",
+            validation="Rolling origin (concept 26): scaler, clusters and regressions fit on seasons before the test season only.",
+            gates=STANDARD_GATES + ["Clusters stable across random restarts (ARI >= 0.80)"],
         ),
         questions=["Do discovered archetypes match listed positions? Where do they disagree, and is the disagreement useful?",
-                   "Which features drive the grouping? What happens if you drop weight?",
-                   "When is a continuous spectrum of roles a better description than discrete clusters?"],
+                   "Did the silhouette score choose the same k you would choose for football reasons?",
+                   "If archetypes don't improve next-season prediction, what are they still good for?"],
     ),
 
     # ------------------------------------------------------------------ LEVEL 3A

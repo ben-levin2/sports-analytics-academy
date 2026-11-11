@@ -2,9 +2,10 @@ import streamlit as st
 
 from .. import curriculum, datasets, progress, ui
 from ..projects_data import PROJECTS
-from . import p1_bayes
+from . import p1_bayes, p2_archetypes
 
-INTERACTIVE = {"p1-bayesian-player-evaluation": (p1_bayes.learning_lab, p1_bayes.production_candidate)}
+INTERACTIVE = {"p1-bayesian-player-evaluation": (p1_bayes.learning_lab, p1_bayes.production_candidate),
+               "p2-archetypes": (p2_archetypes.learning_lab, p2_archetypes.production_candidate)}
 
 
 def _toggle(p, key, label):

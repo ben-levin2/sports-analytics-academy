@@ -37,10 +37,6 @@ Nothing here reads PSFAL files directly. Export what you need from your own proj
         ui.sim_banner("This dataset currently uses simulated data. Simulated variants: "
                       + ", ".join(spec.simulated) + ".")
 
-    if spec_id == "player_profiles":
-        st.caption("Upload for this dataset is planned with the Level 2 project, which will let you choose feature columns.")
-        return
-
     st.markdown("### Upload a CSV")
     up = st.file_uploader("CSV file", type=["csv"], key=f"up_{spec_id}")
     if up is None:
@@ -63,6 +59,14 @@ Nothing here reads PSFAL files directly. Export what you need from your own proj
                                        index=default, key=f"map_{spec_id}_{field}", help=meaning)
         if choice != "(none)":
             mapping[choice] = field
+
+    if spec.features:
+        used = set(mapping)
+        numeric = [c for c in cols if c not in used and pd.api.types.is_numeric_dtype(raw[c])]
+        feats = st.multiselect("Feature columns to keep (three or more numeric stats)", numeric,
+                               default=numeric[:8], key=f"feats_{spec_id}")
+        for c in feats:
+            mapping[c] = c
 
     label = st.text_input("Label for this dataset", value=up.name, key=f"lbl_{spec_id}")
     real = st.checkbox("This is real data that I have the right to use (required for Production Candidate gates)",

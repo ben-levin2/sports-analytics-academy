@@ -98,6 +98,8 @@ def make_edge_defenders(n: int = 150, seed: int = 21) -> pd.DataFrame:
     label_map = {"pass_rusher": ["EDGE"] * 8 + ["DT"] + ["LB"], "run_stuffer": ["DT"] * 8 + ["EDGE"] * 2,
                  "hybrid": ["LB"] * 6 + ["EDGE"] * 4}
     df["listed_position"] = [rng.choice(label_map[k]) for k in kinds]
+    df["season"] = 2025
+    df["position"] = df["listed_position"]
     return _tag(df)
 
 
@@ -234,3 +236,56 @@ def make_dl_free_agents(n: int = 24, seed: int = 606) -> pd.DataFrame:
     sd = np.round(0.25 * value + rng.uniform(0.2, 1.0, n), 2)
     return _tag(pd.DataFrame({"player_id": [f"DL{i + 1:02d}" for i in range(n)], "position": pos,
                               "cap_hit_m": cap, "value": value, "value_sd": sd}))
+
+
+# =====================================================================================
+# Defensive player profiles for Level 2 (thousands of player-seasons, hidden archetypes)
+# =====================================================================================
+PROFILE_FEATURES = ["pressure_rate", "run_stop_rate", "tackle_rate", "coverage_share",
+                    "pbu_rate", "missed_tackle_rate", "weight_lbs"]
+
+_ARCHETYPES = {   # group: {archetype: (feature means in PROFILE_FEATURES order, listed-position mix, dev effect)}
+    "DL": {"Edge rusher":          ((0.13, 0.05, 0.05, 0.03, 0.002, 0.13, 255), {"EDGE": 0.85, "DT": 0.15}, 3.0),
+           "Interior run stopper": ((0.05, 0.10, 0.07, 0.00, 0.001, 0.10, 305), {"DT": 0.85, "EDGE": 0.15}, -2.0),
+           "Interior penetrator":  ((0.09, 0.08, 0.06, 0.01, 0.002, 0.14, 285), {"DT": 0.75, "EDGE": 0.25}, 1.5)},
+    "LB": {"Run thumper":          ((0.04, 0.09, 0.12, 0.30, 0.004, 0.11, 240), {"LB": 1.0}, -1.0),
+           "Coverage LB":          ((0.03, 0.05, 0.09, 0.60, 0.012, 0.09, 225), {"LB": 0.8, "S": 0.2}, 2.0),
+           "Blitzer":              ((0.10, 0.07, 0.10, 0.25, 0.004, 0.14, 232), {"LB": 0.75, "EDGE": 0.25}, 1.0)},
+    "DB": {"Man corner":           ((0.00, 0.02, 0.05, 0.92, 0.020, 0.12, 188), {"CB": 0.95, "S": 0.05}, 1.0),
+           "Ball-hawk safety":     ((0.01, 0.03, 0.06, 0.85, 0.016, 0.10, 200), {"S": 0.8, "CB": 0.2}, 2.5),
+           "Box safety":           ((0.02, 0.06, 0.09, 0.55, 0.008, 0.13, 210), {"S": 0.9, "LB": 0.1}, -1.5)},
+}
+_SD = np.array([0.020, 0.015, 0.015, 0.06, 0.004, 0.025, 9.0])
+
+
+def make_defensive_profiles(n_players: int = 1300, seed: int = 707) -> pd.DataFrame:
+    """One row per player-season (2019-2025, ~4,000 rows). Per-snap rate features get noisier
+    when snaps are low. `production` is a 0-100 index; `next_production` is the same player's
+    production the following season (missing in his last season). `true_archetype` is hidden truth."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for i in range(n_players):
+        group = rng.choice(["DL", "LB", "DB"], p=[0.33, 0.27, 0.40])
+        arch = rng.choice(list(_ARCHETYPES[group]))
+        mean, mix, dev = _ARCHETYPES[group][arch]
+        pos = rng.choice(list(mix), p=list(mix.values()))
+        talent = rng.normal(0, 1)
+        start = int(rng.integers(2019, 2025))
+        length = int(rng.integers(2, 5))
+        player_mean = np.array(mean) + rng.normal(0, 0.5, len(mean)) * _SD    # this player's own style
+        prod = 50 + 8 * talent + rng.normal(0, 4)
+        for s in range(start, min(start + length, 2026)):
+            snaps = int(np.clip(rng.lognormal(5.6, 0.6), 40, 900))
+            noise = rng.normal(0, 1, len(mean)) * _SD * np.sqrt(250 / snaps) * np.r_[np.ones(6), 0.3]
+            feats = np.clip(player_mean + noise, 0, None)
+            feats[3] = min(feats[3], 1.0)                     # coverage share is a share
+            rows.append([f"D{i + 1:04d}", s, group, pos, snaps, *feats.round(4), round(float(prod), 1), arch])
+            prod = 0.65 * prod + 0.35 * 50 + dev + 3 * talent + rng.normal(0, 4.5)
+    df = pd.DataFrame(rows, columns=["player_id", "season", "position_group", "position", "snaps",
+                                     *PROFILE_FEATURES, "production", "true_archetype"])
+    df = df.sort_values(["player_id", "season"])
+    nxt = df.groupby("player_id")["production"].shift(-1)
+    gap = df.groupby("player_id")["season"].shift(-1) - df["season"]
+    df["next_production"] = nxt.where(gap == 1)
+    cols = [c for c in df.columns if c != "true_archetype"] + ["true_archetype"]
+    return _tag(df[cols].reset_index(drop=True))

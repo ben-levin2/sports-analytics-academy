@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT))
 import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 
-from academy import config, curriculum, data, datasets, progress, quiz, shrinkage, validation  # noqa: E402
+from academy import archetypes, config, curriculum, data, datasets, progress, quiz, shrinkage, validation  # noqa: E402
 from academy.labs import EXERCISES  # noqa: E402
 from academy.lessons import LOAD_ERRORS, all_lessons  # noqa: E402
 from academy.projects_data import PROJECTS  # noqa: E402
@@ -104,6 +104,32 @@ def test_calibration_and_time_gates_are_wired_in():
     p = res["prob"]
     assert 0 <= p["ece"] <= 1 and p["skill"] > 0 and len(p["reliability"]) == 5
     assert 0.25 < p["event_rate"] < 0.42
+
+
+def test_level2_complete_and_archetype_engine():
+    level2 = {c.id for c in curriculum.concepts_in_level(2)}
+    assert level2 <= {cid for l in all_lessons() for cid in l.concept_ids}
+    df = data.make_defensive_profiles()
+    assert len(df) > 3000 and df.attrs.get("simulated")
+    feats = archetypes.feature_candidates(df)
+    assert set(data.PROFILE_FEATURES) == set(feats)
+    d = archetypes.prepare(df, feats, "DL", 150)
+    _, Z = archetypes.standardize(d, feats)
+    assert archetypes.stability(Z, 3) > 0.8
+    res = archetypes.evaluate_downstream(df, feats, 3, "DL", 100)
+    assert res["ok"] and res["leak_ok"] and res["n_seasons"] >= 3
+    gl = archetypes.gates(res, {"source": "simulated", "real": False})
+    assert archetypes.verdict(gl) == "Learning Lab only"
+    assert archetypes.gates({"ok": False, "reason": "x"}, {"source": "upload", "real": True})[0][1] is False
+
+
+def test_profile_upload_validation():
+    df = data.make_defensive_profiles().drop(columns="true_archetype")
+    assert datasets.save_upload("player_profiles", df[["player_id", "season", "position", "snaps"]], "x", True)
+    assert datasets.save_upload("player_profiles", df, "mine", True) == []
+    loaded, info = datasets.load("player_profiles")
+    assert info["source"] == "upload" and len(loaded) == len(df)
+    datasets.remove_upload("player_profiles")
 
 
 def test_posterior_table_shrinks_low_volume_more():
@@ -204,6 +230,11 @@ def test_app_pages_projects_and_quiz_flow():
     at.button(key="p1_eval").click().run()
     assert not at.exception
     assert at.session_state["progress"]["projects"][PROJECTS[0].id]["runs"][-1]["verdict"].startswith("Learning Lab only")
+    at.selectbox(key="proj_pick").set_value("p2-archetypes").run()
+    assert not at.exception
+    at.button(key="p2_eval").click().run()
+    assert not at.exception
+    assert at.session_state["progress"]["projects"]["p2-archetypes"]["runs"][-1]["verdict"].startswith("Learning Lab only")
 
     at.sidebar.radio(key="nav").set_value("Lessons").run()
     for lesson in all_lessons():

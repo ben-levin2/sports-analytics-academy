@@ -42,7 +42,7 @@ Six levels, **28 tracked concepts**. The four predictive-modeling methods sit in
 | 5 Advanced Statistical Modeling | 21–23, **27 Mixed-effects models** | P5 Hierarchical Player Development |
 | 6 Optimization & Research | 24 | P6A Constrained Lineup Optimization, P6B Integrated Research |
 
-Built now: all six Level 1 lessons (10-step format), the full Level 1 project, runnable Learning Lab starters for the other seven projects, and 10 Python Lab exercises (including calibration/Brier, time-based CV and conformal prediction).
+Built now: all Level 1 lessons (concepts 1–6), Level 2 lessons (concepts 7–10), lessons for concepts 25–26 (calibration and Brier score, time-based CV), the full Level 1 and Level 2 projects with automated Production Candidate checks, runnable Learning Lab starters for the other six projects, and 12 Python Lab exercises. Neural VAEs need PyTorch, which isn't installed; L2.4 teaches the exact linear version instead.
 
 ## Progress rules
 

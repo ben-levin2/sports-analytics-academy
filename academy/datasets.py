@@ -35,6 +35,7 @@ class Spec:
     used_by: list = field(default_factory=list)
     check: Callable | None = None   # extra validation: df -> list[str]
     numeric: list = field(default_factory=list)
+    features: bool = False          # True = user picks extra numeric feature columns on upload
 
 
 def _check_rates(df):
@@ -45,6 +46,16 @@ def _check_rates(df):
         errs.append("successes must be between 0 and opportunities on every row.")
     if df.duplicated(["player_id", "season"]).any():
         errs.append("Duplicate player_id + season rows. Aggregate to one row per player-season first.")
+    return errs
+
+
+def _check_profiles(df):
+    from .archetypes import feature_candidates
+    errs = []
+    if len(feature_candidates(df)) < 3:
+        errs.append("Needs at least three numeric feature columns besides id/season/position/snaps/production.")
+    if df.duplicated(["player_id", "season"]).any():
+        errs.append("Duplicate player_id + season rows. Use one row per player-season.")
     return errs
 
 
@@ -59,10 +70,15 @@ SPECS = {s.id: s for s in [
           "Pressure rate by position": data.make_pressure_by_position},
          ["P1", "P5"], _check_rates, ["season", "successes", "opportunities"]),
     Spec("player_profiles", "Player statistical profiles",
-         "One row per player (or player-season) with several per-snap or per-game rate stats.",
-         {"player_id": "unique player key", "position": "conventional position label"},
-         {"<feature columns>": "three or more numeric stats; you pick them on the project page"},
-         {"Edge defenders (3 hidden types)": data.make_edge_defenders}, ["P2"]),
+         "One row per player-season with three or more numeric per-snap or per-game stats. "
+         "Add production and next_production to unlock the Production Candidate test.",
+         {"player_id": "unique player key", "season": "season year (integer)", "position": "listed position label"},
+         {"position_group": "e.g. DL / LB / DB (lets you cluster within a group)", "snaps": "playing volume (for a minimum-snaps filter)",
+          "production": "this season's production measure", "next_production": "the same player's production the following season",
+          "<feature columns>": "three or more numeric stats, chosen when you upload"},
+         {"Defensive profiles (~3,600 player-seasons)": data.make_defensive_profiles,
+          "Edge defenders (150, 3 hidden types)": data.make_edge_defenders},
+         ["P2"], _check_profiles, ["season"], features=True),
     Spec("roster_careers", "Roster careers (time to contribution)",
          "One row per recruit: how many seasons we observed him, and whether he reached the contribution threshold.",
          {"player_id": "unique player key", "team": "team key", "class_year": "recruiting class",
