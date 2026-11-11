@@ -321,3 +321,27 @@ def make_game_logs(n_players: int = 160, seasons=range(2019, 2026), weeks: int =
                                  "hot" if state == 0 else "cold"))
     df = pd.DataFrame(rows, columns=["player_id", "season", "week", "grade", "true_state"])
     return _tag(df)
+
+
+def make_pressure_hierarchical(n_players: int = 1500, seed: int = 909) -> pd.DataFrame:
+    """Pressure rates (rate-events schema) with the structure a hierarchical model is built for:
+    position averages, TEAM effects (scheme/coaching), growth with EXPERIENCE, and player talent.
+    Effects are modest on purpose; most variation is still player talent and luck."""
+    rng = np.random.default_rng(seed)
+    pos_mean = {"EDGE": 0.11, "DT": 0.065, "LB": 0.05}
+    team_eff = rng.normal(0, 0.15, 67)                       # logit scale
+    rows = []
+    for i in range(n_players):
+        pos = ["EDGE", "DT", "LB"][i % 3]
+        team = int(rng.integers(0, 67))
+        talent = rng.normal(0, 0.30)
+        start = int(rng.integers(2016, 2026))
+        for exp, s in enumerate(range(start, min(start + int(rng.integers(1, 5)), 2026))):
+            mu = pos_mean[pos]
+            z = np.log(mu / (1 - mu)) + team_eff[team] + 0.12 * min(exp, 3) + talent + rng.normal(0, 0.08)
+            p = 1 / (1 + np.exp(-z))
+            n = min(600, max(3, int(rng.lognormal(4.8, 0.9))))
+            rows.append((f"H{i + 1:04d}", s, f"T{team + 1:02d}", pos, int(rng.binomial(n, p)), n, round(float(p), 4)))
+    df = pd.DataFrame(rows, columns=["player_id", "season", "team", "position", "successes", "opportunities", "true_rate"])
+    df.attrs["labels"] = ("pressures", "pass-rush snaps", "pressure rate")
+    return _tag(df)

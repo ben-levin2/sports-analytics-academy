@@ -1,6 +1,7 @@
 # Optional extras. NOT needed to run the academy: everything works on requirements.txt alone.
-# Install only if you want the real-LSTM labs in Level 4:
 #   pip install -r requirements-optional.txt
-# Smaller, CPU-only alternative:
+# PyTorch: real-LSTM labs in Level 4. Smaller, CPU-only alternative:
 #   pip install torch --index-url https://download.pytorch.org/whl/cpu
 torch>=2.2
+# PyMC: run the PyMC version of the Level 5 hierarchical model (the academy's NumPy sampler works without it)
+pymc>=5.10

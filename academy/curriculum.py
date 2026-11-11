@@ -66,7 +66,9 @@ CONCEPT_BY_ID = {c.id: c for c in CONCEPTS}
 # Method comparisons the curriculum must teach, and where they land.
 COMPARISONS = (
     ("Bayesian regression vs ordinary regression", 1, "L1.4"),
-    ("Ridge regression vs hierarchical modeling", 5, "planned"),
+    ("Ridge regression vs hierarchical modeling", 5, "L5.4"),
+    ("Mixed-effects vs hierarchical Bayes", 5, "L5.6"),
+    ("EM vs MCMC", 5, "L5.1–L5.2"),
     ("Gaussian processes vs ordinary regression", 3, "L3.7"),
     ("HMMs vs LSTMs", 4, "L4.4"),
     ("Calibration vs discrimination", 3, "L3.1"),

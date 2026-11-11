@@ -230,60 +230,43 @@ PROJECTS = [
 
     # ------------------------------------------------------------------ LEVEL 5
     Project(
-        id="p5-hierarchical-development", level=5, slot="", title="Hierarchical Player Development Model",
-        objective="Extend the Level 1 shrinkage project to partial pooling across positions, teams, experience levels and populations.",
-        concept_ids=["hierarchical-bayes", "mcmc", "em", "mixed-effects"], dataset_id="rate_events",
-        psfal="**Separate from PSFAL; never changes it.** Model 7 is being redesigned (the current candidate is a draft-outlook model), so this project does not assume its design. It teaches partial pooling: players share information with their position group, and groups share information with the population. A draft-outlook model, or a Model 8-style forecast, could use that idea, but only after beating a simple baseline on a test set fixed in advance.",
+        id="p5-hierarchical-development", level=5, slot="", status="built", title="Hierarchical Player Development Model",
+        objective="Extend Level 1 shrinkage to partial pooling across positions, teams and experience levels, fit it by MCMC, and test whether the extra complexity beats Level 1 shrinkage and 'same as last season' on later seasons.",
+        concept_ids=["hierarchical-bayes", "mcmc", "em", "mixed-effects", "time-based-cv"], dataset_id="rate_events",
+        psfal="""
+**The academy is separate from PSFAL and never changes it.**
+
+- **Model 7:** being redesigned (current candidate: draft outlook), so this project doesn't assume its design. It tests the general idea behind it: players borrowing strength from their position, team and experience level.
+- **Model 8:** its gain came where production was thin. That's exactly where partial pooling changes estimates most.
+- **Your rule, applied strictly:** the hierarchical model must beat **both** the Level 1 shrinkage model and "same as last season" on later seasons, converge (R-hat), and give calibrated ranges. Otherwise the extra complexity hasn't earned its place.
+""",
         learning=Track(
-            summary="Compare no pooling, complete pooling and partial pooling (by position) on next-season prediction, then outline the full PyMC model.",
-            steps=["No pooling: each player's raw rate.", "Complete pooling: one population mean for everyone.",
-                   "Partial pooling: position-specific priors fitted from data (empirical Bayes).",
-                   "Compare all three with rolling-origin validation.",
-                   "Read the PyMC sketch: what MCMC adds (uncertainty in the priors themselves) and how to check convergence (R-hat, effective sample size)."],
-            code='''from academy.data import make_pressure_by_position
-from academy import shrinkage as S
-
-df = make_pressure_by_position()                       # SIMULATED pressure rates for EDGE, DT, LB
-pooled = S.evaluate_next_season(df, group=None)        # one prior for everyone
-by_pos = S.evaluate_next_season(df, group="position")  # partial pooling within position
-
-print("Weighted MSE of next-season pressure rate (lower is better)")
-print(f"  no pooling (raw past rate):       {by_pos['overall']['raw']:.6f}")
-print(f"  complete pooling (position mean): {by_pos['overall']['population']:.6f}")
-print(f"  partial pooling, one prior:       {pooled['overall']['model']:.6f}")
-print(f"  partial pooling, by position:     {by_pos['overall']['model']:.6f}")
-
-# Full hierarchical Bayesian version (needs `pip install pymc`; not run here):
-PYMC_SKETCH = """
-import pymc as pm
-with pm.Model() as m:
-    mu_pop  = pm.Normal("mu_pop", -2.5, 1)                 # population mean (logit scale)
-    sd_pos  = pm.HalfNormal("sd_pos", 0.5)
-    mu_pos  = pm.Normal("mu_pos", mu_pop, sd_pos, shape=n_positions)
-    sd_play = pm.HalfNormal("sd_play", 0.5)
-    z       = pm.Normal("z", mu_pos[pos_idx], sd_play, shape=n_players)
-    pm.Binomial("y", n=opportunities, p=pm.math.invlogit(z[player_idx]), observed=successes)
-    idata = pm.sample(1000, tune=1000, chains=4)           # MCMC; then check R-hat < 1.01
-"""
-print(PYMC_SKETCH)
-''',
-            limitations=["Empirical Bayes plugs in point estimates of the priors and so understates uncertainty; full MCMC fixes that.",
-                         "Team and experience levels are not yet in the learning code; they are the next extension.",
-                         "Simulated data where the position structure is known to exist."],
+            summary="Fit the hierarchical model with the NumPy MCMC sampler, check convergence, read the position, team and experience effects, compare with a statsmodels mixed model, and see partial pooling at work.",
+            steps=["Pick a dataset: one WITH team/experience effects and one WITHOUT (the Level 1 data).",
+                   "Run the sampler; read R-hat and ESS before anything else.",
+                   "Read the effects: experience steps, team spread, player spread.",
+                   "Compare with the mixed-effects (statsmodels) fit: same structure, different fitting.",
+                   "See which players move most under pooling, and why.",
+                   "Optional: read the same model written in PyMC."],
+            limitations=["Simulated data; the 'with effects' dataset has team and experience effects built in, so a win there is expected.",
+                         "Rates are modelled on the log-odds scale with a normal approximation for luck; very low counts are approximate.",
+                         "Teaching sampler: 3 chains of 900 rounds. Production work would use PyMC/Stan and longer runs.",
+                         "Players are assumed to stay with one team; transfers would need a richer model."],
         ),
         production=Track(
-            summary="A hierarchical model qualifies if it beats the Level 1 position-prior model out of sample, converges, and produces calibrated intervals.",
-            steps=["Pre-register the comparison against the Level 1 model.", "Fit on earlier seasons with MCMC.",
-                   "Check convergence: R-hat < 1.01, adequate effective sample size, no divergences.",
-                   "Evaluate on later seasons; check interval coverage."],
-            baseline="Level 1 position-prior shrinkage model.",
-            metric="Opportunity-weighted next-season MSE; 80% interval coverage.",
-            validation="Rolling origin by season, identical to Level 1.",
-            gates=STANDARD_GATES + ["MCMC convergence diagnostics pass (R-hat, ESS, divergences)"],
+            summary="Season by season: fit all three approaches on earlier seasons only, then predict each returning player's next-season rate.",
+            steps=["Upload real player-season rate data (with team and position) and mark it real.",
+                   "Run the evaluation (about 15 seconds).",
+                   "Read every gate, especially 'Beats BOTH baselines' and 'MCMC converged'.",
+                   "If it doesn't beat Level 1, the honest answer is: use Level 1."],
+            baseline="Two baselines: 'same as last season' (player's last raw rate) and the Level 1 position-shrinkage model. The model must beat the better one.",
+            metric="Opportunity-weighted MSE of next-season rate (same as Level 1).",
+            validation="Rolling origin by season (concept 26) over the last 6 seasons; R-hat checked in every fold (concept 22); 80% predictive coverage (concept 25).",
+            gates=STANDARD_GATES + ["MCMC convergence diagnostics pass (R-hat, ESS)"],
         ),
-        questions=["Which players benefit most from position-level pooling, and why?",
-                   "How is a mixed-effects model with a random player effect related to this hierarchical model?",
-                   "When does adding team-level pooling help, and when does it just add noise?"],
+        questions=["How much does the hierarchical model gain over Level 1, and where does it come from (team, experience)?",
+                   "On data without team or experience effects, it loses. What does that say about adding structure?",
+                   "How large is the team spread compared with the player spread? What would that mean for scheme vs talent?"],
     ),
 
     # ------------------------------------------------------------------ LEVEL 6A

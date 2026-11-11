@@ -90,7 +90,8 @@ SPECS = {s.id: s for s in [
           "successes": "count of successes", "opportunities": "count of chances"},
          {"team": "team key", "position": "position label (enables position-specific priors)"},
          {"QB completion %": data.make_qb_completions, "LB tackle share": data.make_lb_tackle_share,
-          "Pressure rate by position": data.make_pressure_by_position},
+          "Pressure rate by position": data.make_pressure_by_position,
+          "Pressure rate with team & experience effects": data.make_pressure_hierarchical},
          ["P1", "P5"], _check_rates, ["season", "successes", "opportunities"]),
     Spec("player_profiles", "Player statistical profiles",
          "One row per player-season with three or more numeric per-snap or per-game stats. "

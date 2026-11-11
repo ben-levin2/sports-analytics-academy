@@ -12,7 +12,7 @@ import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 
 from academy import (archetypes, config, curriculum, data, datasets, progress, quiz, shrinkage, spatial,  # noqa: E402
-                     sequence, survival, validation)
+                     hierarchical, sequence, survival, validation)
 from academy.labs import EXERCISES  # noqa: E402
 from academy.lessons import LOAD_ERRORS, all_lessons  # noqa: E402
 from academy.projects_data import PROJECTS  # noqa: E402
@@ -184,6 +184,39 @@ def test_level4_complete_and_sequence_engine():
     assert any(n == "Sample sufficiency" and not ok for n, ok, _ in gl)
 
 
+def test_level5_complete_and_hierarchical_engine():
+    import numpy as np
+    level5 = {c.id for c in curriculum.concepts_in_level(5)}
+    assert level5 <= {cid for l in all_lessons() for cid in l.concept_ids}
+    d = hierarchical.prepare(data.make_pressure_hierarchical())
+    fit = hierarchical.gibbs(d, iters=500, burn=200)
+    diag = hierarchical.diagnostics(fit).set_index("parameter")
+    assert diag["R-hat"].max() < 1.1
+    assert abs(diag.loc["experience 3+", "mean"] - 0.36) < 0.08         # recovers the simulated effect
+    assert abs(diag.loc["sd player", "mean"] - 0.30) < 0.06
+    chains = np.random.default_rng(0).normal(size=(4, 500))
+    assert abs(hierarchical.rhat(chains) - 1) < 0.02 and hierarchical.ess(chains) > 1000
+    stuck = chains + np.arange(4)[:, None] * 3
+    assert hierarchical.rhat(stuck) > 1.5
+
+
+def test_level5_contest_both_ways():
+    gated = {"source": "upload", "real": True}
+    with_fx = hierarchical.evaluate(data.make_pressure_hierarchical())
+    assert with_fx["ok"] and with_fx["leak_ok"] and with_fx["gain_vs_level1"] > 0.05
+    assert hierarchical.verdict(hierarchical.gates(with_fx, {"source": "simulated", "real": False})) == "Learning Lab only"
+    without = hierarchical.evaluate(data.make_pressure_by_position())
+    assert without["gain_vs_level1"] < 0                               # extra structure that isn't there hurts
+    assert any(n == "Beats BOTH baselines" and not ok for n, ok, _ in hierarchical.gates(without, gated))
+
+
+def test_statsmodels_is_required_and_pymc_optional():
+    req = (ROOT / "requirements.txt").read_text()
+    opt = (ROOT / "requirements-optional.txt").read_text()
+    assert "statsmodels" in req and "pymc" not in req and "pymc" in opt
+    import statsmodels  # noqa: F401
+
+
 def test_torch_is_optional():
     req = (ROOT / "requirements.txt").read_text()
     assert "torch" not in req
@@ -250,7 +283,7 @@ def test_lesson_completion_and_concept_mastery_are_separate():
     progress.record_attempt(s, l.id, l.title, 0.0, 0, len(l.quiz), weak)
     assert progress.is_mastered(s, l.id)                       # best attempt still counts for the lesson
     assert curriculum.concept_status(s, cid) == "learning"     # latest attempt drives the concept
-    assert curriculum.concept_status(s, "mcmc") == "planned"
+    assert curriculum.concept_status(s, "bayesian-optimization") == "planned"
 
 
 def test_persistence_roundtrip_merge_and_corrupt_file():
@@ -305,7 +338,7 @@ def test_app_pages_projects_and_quiz_flow():
     assert not at.exception
     assert at.session_state["progress"]["projects"]["p2-archetypes"]["runs"][-1]["verdict"].startswith("Learning Lab only")
     for pid, btn in [("p3a-time-to-contribution", "p3a_eval"), ("p3b-geographic-recruiting", "p3b_eval"),
-                     ("p4-game-by-game", "p4_eval")]:
+                     ("p4-game-by-game", "p4_eval"), ("p5-hierarchical-development", "p5_eval")]:
         at.selectbox(key="proj_pick").set_value(pid).run()
         assert not at.exception, (pid, at.exception)
         at.button(key=btn).click().run()
