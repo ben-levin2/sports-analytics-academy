@@ -191,66 +191,41 @@ PROJECTS = [
 
     # ------------------------------------------------------------------ LEVEL 4
     Project(
-        id="p4-game-by-game", level=4, slot="", title="Game-by-Game Player Performance",
-        objective="Look for hidden hot and cold states and test simple forecasts of next-game performance, without overclaiming from short sequences.",
-        concept_ids=["hmms", "lstms", "seq2seq", "conformal-prediction"], dataset_id="game_logs",
-        psfal="Game-level data only covers parts of some seasons. These are **learning exercises** whenever the sample is too short. 12 games per player is far too few for an LSTM.",
+        id="p4-game-by-game", level=4, slot="", status="built", title="Game-by-Game Player Performance",
+        objective="Look for hidden hot and cold form, forecast the next game from earlier games only, put honest conformal ranges on the forecasts, and test whether any of it beats the season-to-date average.",
+        concept_ids=["hmms", "lstms", "seq2seq", "conformal-prediction", "time-based-cv"], dataset_id="game_logs",
+        psfal="""
+**The academy is separate from PSFAL and never changes it.**
+
+- **Your game-level data covers only parts of some seasons.** This project checks sample sufficiency first, and anything below the bar is labelled a learning exercise. No strong predictive claims.
+- **Same lesson as Models 9 and 9b:** "same as last season" was hard to beat across seasons. Within a season, the season-to-date average plays that role, and the forecasts here must beat it on later seasons.
+- **Your rule:** a game-level forecast or hot/cold label goes on your site only if it beats that baseline on a test set fixed in advance, with calibrated ranges.
+""",
         learning=Track(
-            summary="Run an HMM forward filter for hot/cold form and compare forecasts with walk-forward validation.",
-            steps=["Plot several players' game sequences.", "Run a two-state HMM filter with stated parameters.",
-                   "Compare season-mean and recency-weighted forecasts, walk-forward.",
-                   "Wrap the best forecast in a split-conformal interval and check coverage."],
-            code='''import numpy as np
-import pandas as pd
-from scipy import stats
-from academy.data import make_weekly_performance
-
-perf = make_weekly_performance()                      # SIMULATED; 12 games per player (a SHORT sequence)
-
-# --- HMM forward filter: P(hot | games so far) for one player, parameters fixed for teaching ---
-P = np.array([[0.8, 0.2], [0.3, 0.7]])               # hot/cold transitions (from L1.6)
-means, sd = np.array([72.0, 60.0]), 8.0               # typical grade when hot / cold
-g = perf[perf["player_id"] == "W001"].sort_values("week")["grade"].to_numpy()
-belief = np.array([0.5, 0.5])
-for wk, x in enumerate(g, start=1):
-    belief = belief @ P                                # predict: state may switch
-    belief *= stats.norm.pdf(x, means, sd)             # update: how well each state explains the grade
-    belief /= belief.sum()
-    print(f"week {wk:>2}: grade {x:5.1f}  P(hot) = {belief[0]:.2f}")
-
-# --- Walk-forward forecasts: use only earlier weeks ---
-errs = {"season mean": [], "EWMA 0.3": []}
-for _, d in perf.groupby("player_id"):
-    y = d.sort_values("week")["grade"].to_numpy()
-    for t in range(3, len(y)):
-        errs["season mean"].append(y[t] - y[:t].mean())
-        errs["EWMA 0.3"].append(y[t] - pd.Series(y[:t]).ewm(alpha=0.3).mean().iloc[-1])
-for k, e in errs.items():
-    print(f"{k:<12} RMSE {np.sqrt(np.mean(np.square(e))):.2f}")
-
-# --- Split conformal: 80% interval from calibration residuals ---
-e = np.abs(np.array(errs["EWMA 0.3"]))
-half = len(e) // 2
-q = np.quantile(e[:half], 0.80 * (1 + 1 / half))
-print(f"\\n80% conformal half-width: +/-{q:.1f} grade points; coverage on the other half: {(e[half:] <= q).mean():.0%}")
-print("LEARNING EXERCISE: 12 games per player cannot support strong predictive claims.")
-''',
-            limitations=["Simulated, 12 games per player: far too short for LSTMs or reliable HMM fitting.",
-                         "HMM parameters are fixed by hand here; fitting them needs EM (Level 5).",
-                         "Real game logs have missing games, opponent effects and injuries."],
+            summary="Check whether the data is sufficient, find hot/cold states with an HMM, compare 1–3 states, watch the live P(hot) for a player, compare forecasts, and (optionally) train a real LSTM.",
+            steps=["Read the sample-sufficiency table. Is this a learning exercise only?",
+                   "Fit HMMs with 1, 2 and 3 states (on games vs season-to-date average) and compare BIC.",
+                   "Follow one player-season: live P(hot), the Viterbi path, and the hidden truth (simulated only).",
+                   "Compare forecasters: season-to-date average, last game, EWMA, HMM.",
+                   "Read the conformal ranges and their coverage.",
+                   "Optional: train a real LSTM if PyTorch is installed."],
+            limitations=["Simulated logs with hot/cold form built in; real form may not persist like this.",
+                         "About 10 observed games per player-season: far too short for LSTMs; even HMM states are hard to pin down.",
+                         "Missing games are skipped, so a 'next game' may be two weeks later.",
+                         "Opponent strength, injuries and snaps are ignored."],
         ),
         production=Track(
-            summary="Only consider this a candidate with full-season game logs across many seasons, and a forecast that beats the season mean walk-forward.",
-            steps=["Collect complete game logs; document coverage gaps.", "Fix the forecast target and metric.",
-                   "Walk-forward validation across seasons.", "Conformal interval coverage checked on later seasons."],
-            baseline="Season-to-date mean.",
-            metric="Walk-forward RMSE of next-game performance; conformal interval coverage.",
-            validation="Walk-forward within season, and train-on-earlier-seasons across seasons.",
-            gates=STANDARD_GATES + ["Sample sufficiency documented (games per player, seasons covered)"],
+            summary="Walk-forward within each test season; EWMA weight, HMM and conformal calibration fitted on earlier seasons only.",
+            steps=["Upload real game logs and mark them real.", "Check the sample-sufficiency gate first.",
+                   "Run the evaluation and read every gate.", "Report the best method's gain honestly, even if it's tiny."],
+            baseline="Season-to-date average of the player's earlier games.",
+            metric="Mean absolute error of the next game's grade.",
+            validation="Rolling origin by season (concept 26) + walk-forward within season; conformal ranges calibrated on the previous season (concept 28).",
+            gates=STANDARD_GATES + ["Sample sufficiency documented (games per player-season, seasons covered)"],
         ),
-        questions=["Is the best recency weight better than luck alone would produce? (Compare with L1.6.)",
-                   "What would an HMM add over an EWMA, and what would an LSTM add over an HMM?",
-                   "How many games per player would you need before trusting a sequence model?"],
+        questions=["Is there a hot hand beyond luck? How big is it, in grade points?",
+                   "Does any forecaster beat the season-to-date average by enough to matter?",
+                   "How many games per player-season would you need before trusting a sequence model?"],
     ),
 
     # ------------------------------------------------------------------ LEVEL 5

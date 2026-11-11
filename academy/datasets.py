@@ -65,6 +65,13 @@ def _check_roster(df):
     return errs
 
 
+def _check_games(df):
+    errs = []
+    if df.duplicated(["player_id", "season", "week"]).any():
+        errs.append("Duplicate player_id + season + week rows. Use one row per player-game.")
+    return errs
+
+
 def _check_profiles(df):
     from .archetypes import feature_candidates
     errs = []
@@ -113,11 +120,12 @@ SPECS = {s.id: s for s in [
          {"Hometowns (simulated metros)": data.make_hometown_production}, ["P3B"], _check_hometowns,
          numeric=["lat", "lon", "production"]),
     Spec("game_logs", "Game-by-game performance",
-         "One row per player-game, in order.",
-         {"player_id": "unique player key", "week": "game order within the season", "grade": "game performance measure"},
-         {"season": "season year"},
-         {"Weekly grades (60 players x 12 weeks)": data.make_weekly_performance}, ["P4"],
-         numeric=["week", "grade"]),
+         "One row per player-game. Missing games are fine (logs often cover only parts of seasons).",
+         {"player_id": "unique player key", "season": "season year (integer)",
+          "week": "game order within the season", "grade": "game performance measure"},
+         {},
+         {"Game logs with hidden hot/cold form (~3,700 games)": data.make_game_logs}, ["P4"], _check_games,
+         numeric=["season", "week", "grade"]),
     Spec("lineup_candidates", "Lineup candidates with costs",
          "One row per candidate player with a cost and an estimated value.",
          {"player_id": "unique player key", "position": "position group", "cap_hit_m": "cost in $M", "value": "estimated value"},

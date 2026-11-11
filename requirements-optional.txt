@@ -1,0 +1,6 @@
+# Optional extras. NOT needed to run the academy: everything works on requirements.txt alone.
+# Install only if you want the real-LSTM labs in Level 4:
+#   pip install -r requirements-optional.txt
+# Smaller, CPU-only alternative:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch>=2.2

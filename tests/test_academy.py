@@ -12,7 +12,7 @@ import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 
 from academy import (archetypes, config, curriculum, data, datasets, progress, quiz, shrinkage, spatial,  # noqa: E402
-                     survival, validation)
+                     sequence, survival, validation)
 from academy.labs import EXERCISES  # noqa: E402
 from academy.lessons import LOAD_ERRORS, all_lessons  # noqa: E402
 from academy.projects_data import PROJECTS  # noqa: E402
@@ -160,6 +160,38 @@ def test_spatial_engine():
     assert spatial.gates(spatial.evaluate_spatial(df.drop(columns="class_year")), {"source": "upload", "real": True})[0][1] is False
 
 
+def test_level4_complete_and_sequence_engine():
+    import numpy as np
+    level4 = {c.id for c in curriculum.concepts_in_level(4)}
+    assert level4 <= {cid for l in all_lessons() for cid in l.concept_ids}
+    df = data.make_game_logs()
+    rs = sequence.running_mean_residuals(df).dropna(subset=["resid"])
+    seqs = [g["resid"].to_numpy() for _, g in rs.groupby(["player_id", "season"])]
+    m2 = sequence.fit_hmm(seqs, 2)
+    assert m2["means"][0] > 0 > m2["means"][1]                       # hot above, cold below
+    assert 0.6 < m2["A"][0, 0] < 0.95                                # recovers sticky (not near-1) form
+    alpha, ll = sequence.forward(seqs[0], m2["pi"], m2["A"], m2["means"], m2["sds"])
+    assert np.allclose(alpha.sum(1), 1) and np.isfinite(ll)
+    assert len(sequence.viterbi(seqs[0], m2["pi"], m2["A"], m2["means"], m2["sds"])) == len(seqs[0])
+    assert sequence.conformal_halfwidth(np.arange(1, 100), 0.8) == 80
+    res = sequence.evaluate_games(df)
+    assert res["ok"] and res["leak_ok"] and res["n_seasons"] >= 3
+    assert all(0.7 < c < 0.9 for c in res["coverage"].values())
+    assert sequence.verdict(sequence.gates(res, {"source": "simulated", "real": False})) == "Learning Lab only"
+    # thin data must fail the sample-sufficiency gate
+    thin = df[df["week"] <= 5]
+    gl = sequence.gates(sequence.evaluate_games(thin), {"source": "upload", "real": True})
+    assert any(n == "Sample sufficiency" and not ok for n, ok, _ in gl)
+
+
+def test_torch_is_optional():
+    req = (ROOT / "requirements.txt").read_text()
+    assert "torch" not in req
+    assert "torch" in (ROOT / "requirements-optional.txt").read_text()
+    if not sequence.torch_available():
+        assert "pip install" in sequence.TORCH_NOTE
+
+
 def test_profile_upload_validation():
     df = data.make_defensive_profiles().drop(columns="true_archetype")
     assert datasets.save_upload("player_profiles", df[["player_id", "season", "position", "snaps"]], "x", True)
@@ -218,7 +250,7 @@ def test_lesson_completion_and_concept_mastery_are_separate():
     progress.record_attempt(s, l.id, l.title, 0.0, 0, len(l.quiz), weak)
     assert progress.is_mastered(s, l.id)                       # best attempt still counts for the lesson
     assert curriculum.concept_status(s, cid) == "learning"     # latest attempt drives the concept
-    assert curriculum.concept_status(s, "lstms") == "planned"
+    assert curriculum.concept_status(s, "mcmc") == "planned"
 
 
 def test_persistence_roundtrip_merge_and_corrupt_file():
@@ -272,7 +304,8 @@ def test_app_pages_projects_and_quiz_flow():
     at.button(key="p2_eval").click().run()
     assert not at.exception
     assert at.session_state["progress"]["projects"]["p2-archetypes"]["runs"][-1]["verdict"].startswith("Learning Lab only")
-    for pid, btn in [("p3a-time-to-contribution", "p3a_eval"), ("p3b-geographic-recruiting", "p3b_eval")]:
+    for pid, btn in [("p3a-time-to-contribution", "p3a_eval"), ("p3b-geographic-recruiting", "p3b_eval"),
+                     ("p4-game-by-game", "p4_eval")]:
         at.selectbox(key="proj_pick").set_value(pid).run()
         assert not at.exception, (pid, at.exception)
         at.button(key=btn).click().run()

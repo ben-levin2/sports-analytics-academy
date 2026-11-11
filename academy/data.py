@@ -292,3 +292,32 @@ def make_defensive_profiles(n_players: int = 1300, seed: int = 707) -> pd.DataFr
     df["next_production"] = nxt.where(gap == 1)
     cols = [c for c in df.columns if c != "true_archetype"] + ["true_archetype"]
     return _tag(df[cols].reset_index(drop=True))
+
+
+# =====================================================================================
+# Game logs for Level 4: hidden hot/cold form + partial season coverage
+# =====================================================================================
+def make_game_logs(n_players: int = 160, seasons=range(2019, 2026), weeks: int = 12,
+                   coverage: float = 0.8, seed: int = 808) -> pd.DataFrame:
+    """One row per player-game: a 0-100 game grade. Each player has his own level, plus a hidden
+    HOT or COLD form that persists from game to game (a Markov chain, lesson L1.6). Only ~80% of
+    games are present, mimicking logs that cover portions of seasons. `true_state` is hidden truth."""
+    rng = np.random.default_rng(seed)
+    P = np.array([[0.80, 0.20], [0.15, 0.85]])        # rows: from HOT, from COLD
+    offset = np.array([6.0, -4.0])
+    rows = []
+    for i in range(n_players):
+        level = rng.normal(62, 6)
+        first = int(rng.integers(min(seasons), max(seasons) + 1))
+        for s in range(first, min(first + int(rng.integers(2, 5)), max(seasons) + 1)):
+            state = int(rng.random() < 0.6)            # start of season: 40% hot, 60% cold
+            level_s = level + rng.normal(0, 2)
+            for w in range(1, weeks + 1):
+                if w > 1:
+                    state = int(rng.random() < P[state, 1])
+                if rng.random() < coverage:
+                    g = level_s + offset[state] + rng.normal(0, 7)
+                    rows.append((f"G{i + 1:03d}", s, w, round(float(np.clip(g, 0, 100)), 1),
+                                 "hot" if state == 0 else "cold"))
+    df = pd.DataFrame(rows, columns=["player_id", "season", "week", "grade", "true_state"])
+    return _tag(df)

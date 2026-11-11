@@ -29,6 +29,9 @@ The academy runs locally. Your progress is saved on your own disk and never gets
 
 Optional checks: `pip install pytest && pytest -q` runs the test suite.
 
+**Optional: PyTorch for the real-LSTM labs (Level 4).** Not needed for anything else; the app detects it and shows an install note when it's missing.
+`pip install -r requirements-optional.txt` (or CPU-only and smaller: `pip install torch --index-url https://download.pytorch.org/whl/cpu`).
+
 ## Curriculum
 
 Six levels, **28 tracked concepts**. The four predictive-modeling methods sit inside the levels where you first need them:
@@ -42,7 +45,7 @@ Six levels, **28 tracked concepts**. The four predictive-modeling methods sit in
 | 5 Advanced Statistical Modeling | 21–23, **27 Mixed-effects models** | P5 Hierarchical Player Development |
 | 6 Optimization & Research | 24 | P6A Constrained Lineup Optimization, P6B Integrated Research |
 
-Built now: lessons for Levels 1–3 (concepts 1–17, 25, 26; Gaussian processes split into three short lessons), the full Level 1, 2 and 3 projects (P1, P2, P3A, P3B) with automated Production Candidate checks, runnable Learning Lab starters for P4–P6B, and 12 Python Lab exercises. No dependencies beyond requirements.txt: the Cox model and Kaplan-Meier are written with NumPy, and Gaussian processes use scikit-learn. Neural VAEs need PyTorch, which isn't installed; L2.4 teaches the exact linear version instead.
+Built now: lessons for Levels 1–4 (concepts 1–20, 25, 26, 28; Gaussian processes, HMMs and LSTMs each split into short parts), the full projects for Levels 1–4 (P1, P2, P3A, P3B, P4) with automated Production Candidate checks, runnable Learning Lab starters for P5–P6B, and 12 Python Lab exercises. The Cox model, Kaplan-Meier and HMMs are written with NumPy; Gaussian processes use scikit-learn.
 
 ## Progress rules
 
