@@ -45,7 +45,7 @@ Six levels, **28 tracked concepts**. The four predictive-modeling methods sit in
 | 5 Advanced Statistical Modeling | 21–23, **27 Mixed-effects models** | P5 Hierarchical Player Development |
 | 6 Optimization & Research | 24 | P6A Constrained Lineup Optimization, P6B Integrated Research |
 
-Built now: lessons for Levels 1–5 plus concepts 25–28 (27 of 28 concepts; only Bayesian optimization, Level 6, remains), the full projects for Levels 1–5 (P1, P2, P3A, P3B, P4, P5) with automated Production Candidate checks, runnable Learning Lab starters for P6A–P6B, and 12 Python Lab exercises. Cox, Kaplan-Meier, HMMs and the hierarchical MCMC sampler are written with NumPy; Gaussian processes use scikit-learn; mixed-effects models use statsmodels.
+Built now: all 28 concepts have lessons (40 lessons across six levels), all 8 projects (P1–P6B) have interactive Learning Lab pages and automated Production Candidate checks, the Integrated Research Project runs a scoreboard across every level, and there are 12 Python Lab exercises. Only NumPy, SciPy, scikit-learn, statsmodels (plus Streamlit, pandas, Matplotlib) are required; PyTorch and PyMC are optional.
 
 ## Progress rules
 

@@ -271,116 +271,75 @@ PROJECTS = [
 
     # ------------------------------------------------------------------ LEVEL 6A
     Project(
-        id="p6a-lineup-optimization", level=6, slot="A", title="Constrained Lineup Optimization",
-        objective="Choose a defensive-line group that maximizes expected value under a cap, and understand the trade-offs between value, cost and risk.",
-        concept_ids=["bayesian-optimization"], dataset_id="lineup_candidates",
-        psfal="The same structure as the cap-constrained defensive line project: an objective (value), constraints (cap, roster slots by position) and trade-offs (risk vs expected value). Bayesian optimization belongs one level up: tuning the settings of the models that produce the value estimates.",
+        id="p6a-lineup-optimization", level=6, slot="A", status="built", title="Constrained Lineup Optimization ($40M D-line)",
+        objective="Choose 6 defensive linemen (at least 2 EDGE and 2 DT) under a $40M cap to maximize projected value, compare Bayesian optimization with random search, greedy and an exact solver, then back-test the choices against what actually happened.",
+        concept_ids=["bayesian-optimization", "time-based-cv"], dataset_id="lineup_candidates",
+        psfal="""
+**The academy is separate from PSFAL and never changes it.**
+
+- **Same structure as your $40M D-line case:** an objective (total value), constraints (cap, roster slots) and trade-offs (risk vs expected value).
+- **An optimizer amplifies its inputs:** it hunts for the most attractive projections, and those are the most likely to be overstated (the optimizer's curse). The back-test measures that directly.
+- **Your rule:** an optimized lineup is only as good as its value model, which must beat a simple baseline on a test set fixed in advance. That gate can't be automated here, so it always shows as open.
+""",
         learning=Track(
-            summary="Brute-force the best 2 EDGE + 2 DT group under a cap, then trace how the answer changes with the cap and with risk aversion.",
-            steps=["Write the objective function.", "Write the constraints (cap, positions).",
-                   "Search every feasible lineup.", "Trace the value-vs-cap trade-off curve.",
-                   "Add a risk penalty (value minus lambda x SD) and see the choice change."],
-            code='''import itertools
-import numpy as np
-import matplotlib.pyplot as plt
-from academy.data import make_dl_free_agents
-
-c = make_dl_free_agents()                              # SIMULATED candidates
-cap_hit, value, sd = c["cap_hit_m"].to_numpy(), c["value"].to_numpy(), c["value_sd"].to_numpy()
-edge = np.flatnonzero(c["position"] == "EDGE"); dt = np.flatnonzero(c["position"] == "DT")
-
-# Every feasible shape: 2 EDGE + 2 DT (positional constraint built into the search space)
-lineups = np.array([e + d for e in itertools.combinations(edge, 2) for d in itertools.combinations(dt, 2)])
-total_cap = cap_hit[lineups].sum(axis=1)
-total_value = value[lineups].sum(axis=1)
-total_sd = np.sqrt((sd[lineups] ** 2).sum(axis=1))
-print(f"{len(lineups)} possible lineups")
-
-def best_lineup(cap, risk=0.0):
-    score = total_value - risk * total_sd                  # objective (risk-adjusted value)
-    score = np.where(total_cap <= cap, score, -np.inf)     # cap constraint
-    i = int(np.argmax(score))
-    return (c.iloc[lineups[i]], score[i]) if np.isfinite(score[i]) else (None, None)
-
-lineup, score = best_lineup(cap=30)
-print("Best 2 EDGE + 2 DT under $30M:\\n", lineup[["player_id", "position", "cap_hit_m", "value", "value_sd"]].to_string(index=False))
-print(f"Total cap {lineup['cap_hit_m'].sum():.1f}M, expected value {lineup['value'].sum():.2f}")
-
-for lam in (1.0, 2.0, 3.0):
-    safe, _ = best_lineup(cap=30, risk=lam)
-    print(f"risk penalty lambda = {lam}: {list(safe['player_id'])}, expected value {safe['value'].sum():.2f}")
-
-caps = np.arange(14, 46, 2)
-vals = []
-for cap in caps:
-    best, _ = best_lineup(cap)
-    vals.append(np.nan if best is None else best["value"].sum())
-fig, ax = plt.subplots()
-ax.plot(caps, vals, marker="o"); ax.set_xlabel("Cap budget ($M)"); ax.set_ylabel("Best expected value")
-ax.set_title("Diminishing returns to cap space (simulated)")
-''',
-            limitations=["Values and costs are simulated; real value estimates carry model uncertainty.",
-                         "Brute force works for small pools only; larger problems need integer programming.",
-                         "Ignores scheme fit and interactions between players."],
+            summary="Set the cap rules and the risk penalty, compare the exact solver, greedy, random search and Bayesian optimization on one season's market, and trace the value-vs-cap trade-off.",
+            steps=["Write down the objective, the constraints and the decision.", "Find the exact best lineup (MILP).",
+                   "Compare greedy, random search and Bayesian optimization under the same budget.",
+                   "Add a risk penalty and see the lineup and the method ranking change.",
+                   "Trace how the best value changes with the cap (diminishing returns)."],
+            limitations=["Simulated market: projections and cap hits are fictional.",
+                         "Value is assumed additive: no scheme fit or chemistry between players.",
+                         "Bayesian optimization is run on a problem with an exact solution, on purpose, to show when it's the wrong tool."],
         ),
         production=Track(
-            summary="An optimizer is only as good as its value estimates. It qualifies only if lineups it chooses outperform a simple heuristic in back-tests.",
-            steps=["Validate the value model first (it must pass its own gates).", "Back-test chosen lineups on later seasons.",
-                   "Compare with a heuristic (e.g., best value per dollar).", "Stress-test with value uncertainty."],
-            baseline="Greedy value-per-dollar heuristic.",
-            metric="Realized value of chosen lineups in later seasons.",
-            validation="Choose using information available before the season; score on that season.",
+            summary="Each season: choose from pre-season projections only, then score the lineup by realized value. Compare with greedy and random legal lineups.",
+            steps=["Upload real candidate pools with season, projected_value and realized_value; mark them real.",
+                   "Run the back-test.", "Read every gate, including the optimizer's-curse check.",
+                   "Remember: the projections must pass their own baseline test first."],
+            baseline="Greedy value-per-dollar pick (plus the median random legal lineup for reference).",
+            metric="Total realized value of the chosen 6-man group per season.",
+            validation="Season-by-season back-test, choosing only from pre-season projections (concept 26).",
             gates=STANDARD_GATES + ["Input value model has itself passed Production Candidate gates"],
         ),
-        questions=["Where does the value-vs-cap curve flatten, and what does that imply?",
-                   "How much expected value do you give up to reduce risk?",
-                   "Which model settings would you tune with Bayesian optimization, and what is the objective?"],
+        questions=["How much does the exact lineup beat greedy, and how much of that survives in realized value?",
+                   "How big is the optimizer's curse for the chosen players?",
+                   "Where does the value-vs-cap curve flatten, and what would you do with the spare cap?"],
     ),
 
     # ------------------------------------------------------------------ LEVEL 6B
     Project(
-        id="p6b-integrated-research", level=6, slot="B", title="Integrated Research Project",
-        objective="Combine methods from earlier levels into one complete, honest football analytics study.",
-        concept_ids=["time-based-cv", "calibration-brier", "conformal-prediction", "hierarchical-bayes"],
+        id="p6b-integrated-research", level=6, slot="B", status="built", title="Integrated Research Project",
+        objective="Tie every level together: run each level's honest test on the current data and say plainly which methods beat a simple baseline and which don't; then register and run one complete study.",
+        concept_ids=["time-based-cv", "calibration-brier", "conformal-prediction", "hierarchical-bayes", "bayesian-optimization"],
         dataset_id="rate_events",
-        psfal="This is the template for any PSFAL study: a registered question, a baseline, a chronological holdout, and conclusions that state uncertainty and limitations.",
+        psfal="""
+**The academy is separate from PSFAL and never changes it.**
+
+- **This is the PSFAL workflow in miniature:** a registered question, a defined baseline, a chronological holdout, every gate reported (failures included), and conclusions that state uncertainty.
+- **The scoreboard is your Model 8 / Models 9–9b lesson applied everywhere:** some methods earn their place, many don't, and the only way to know is to test them against a simple baseline in advance.
+""",
         learning=Track(
-            summary="Walk the full research template on simulated data, end to end, using the Level 1 engine as the 'advanced model'.",
-            steps=["Research question (written first).", "Data preparation.", "Baseline model.", "Advanced model.",
-                   "Validation (time-based).", "Uncertainty analysis (interval coverage).", "Written conclusions."],
-            code='''from academy.data import make_qb_completions
-from academy import shrinkage as S
-
-QUESTION = "Do shrunk completion rates predict next-season completion % better than raw past rates?"
-print("Research question:", QUESTION)
-
-df = make_qb_completions()                             # SIMULATED; swap for real data via Data Sources
-df = df[df["opportunities"] >= 1]                      # data preparation
-print(f"Data: {df['player_id'].nunique()} QBs, {df['season'].nunique()} seasons, {len(df)} player-seasons")
-
-res = S.evaluate_next_season(df)                       # baseline + advanced model + time-based validation
-o = res["overall"]
-print(f"Baseline (raw past rate) MSE: {o['raw']:.5f}")
-print(f"Baseline (league mean)   MSE: {o['population']:.5f}")
-print(f"Advanced (shrinkage)     MSE: {o['model']:.5f}  ({res['gain']:+.1%} vs best baseline)")
-print(f"Uncertainty: 80% predictive intervals covered {res['coverage']:.1%} of next-season outcomes")
-
-print("\\nConclusion (draft): on simulated data, shrinkage beat both baselines in",
-      f"{res['wins']} of {res['n_seasons']} test seasons. This is a LEARNING result:",
-      "it says nothing about real players until repeated on real data with all gates passing.")
-''',
-            limitations=["Simulated data; the conclusion is about the method, not about football."],
+            summary="Run the scoreboard across all six levels, read the plain-English verdicts, and walk the research template using one worked example.",
+            steps=["Run the scoreboard and read which methods beat their baseline.",
+                   "For each method that failed, write one sentence on why (noise, too little data, structure not present).",
+                   "Pick one study and walk the template: question, data prep, baseline, advanced model, validation, uncertainty, conclusions.",
+                   "Note which results are simulated (all of them, until you upload data)."],
+            limitations=["On simulated data, every 'win' reflects how the simulation was built; it says nothing about real football.",
+                         "Each study uses its project's default settings; tuning them could change small margins.",
+                         "Running every test takes about a minute."],
         ),
         production=Track(
-            summary="A full study is a production candidate only when every standard gate passes on real data and the write-up states limitations.",
-            steps=["Register the question, metric and baseline before touching outcomes.", "Run on real data.",
-                   "Report all gates, including failures.", "Write conclusions with uncertainty."],
-            baseline="Defined in the registration.", metric="Defined in the registration.",
-            validation="Chronological holdout, locked before analysis.",
+            summary="Register the question, metric, baseline and primary study BEFORE running anything; the study's own gates then decide the verdict.",
+            steps=["Write and save the registration (it's timestamped).", "Upload real data for the primary study and mark it real.",
+                   "Run the primary study's evaluation.", "Report every gate, including failures, in the conclusions."],
+            baseline="Defined in the registration (each study's built-in simple baseline).",
+            metric="Defined in the registration (each study's predefined metric).",
+            validation="Chronological holdout, as each study implements it.",
             gates=STANDARD_GATES + ["Question, metric and baseline registered before analysis"],
         ),
-        questions=["What would change your conclusion?", "Which result would you most like a skeptic to reproduce?",
-                   "What is the smallest improvement that would matter for a real decision?"],
+        questions=["Which methods earned their complexity, and what did those have in common?",
+                   "Which failures were about data (too little, too noisy) rather than the method?",
+                   "If you could collect one more kind of data, which failed study would it most likely rescue?"],
     ),
 ]
 

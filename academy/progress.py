@@ -255,6 +255,14 @@ def log_project_run(state: dict, pid: str, title: str, verdict: str) -> None:
     _commit(state)
 
 
+def set_registration(state: dict, pid: str, reg: dict) -> None:
+    """Save a study registration (question, metric, baseline, primary study) with a timestamp."""
+    rec = project_rec(state, pid)
+    rec["registration"] = {**reg, "ts": iso()}
+    log(state, "project", f"Registered study: {reg.get('question', '')[:60]}")
+    _commit(state)
+
+
 def set_project_notes(state: dict, pid: str, notes: str) -> None:
     project_rec(state, pid)["notes"] = notes
     _commit(state)
@@ -302,6 +310,8 @@ def merge(a: dict, b: dict) -> dict:
                               key=lambda r: r["ts"])[-20:]
         if not mine["notes"]:
             mine["notes"] = rec.get("notes", "")
+        if "registration" in rec and "registration" not in mine:
+            mine["registration"] = rec["registration"]
     seen = {(x["ts"], x["text"]) for x in out["activity"]}
     out["activity"] += [x for x in other["activity"] if (x["ts"], x["text"]) not in seen]
     out["activity"] = sorted(out["activity"], key=lambda x: x["ts"])[-200:]

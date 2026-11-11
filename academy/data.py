@@ -345,3 +345,23 @@ def make_pressure_hierarchical(n_players: int = 1500, seed: int = 909) -> pd.Dat
     df = pd.DataFrame(rows, columns=["player_id", "season", "team", "position", "successes", "opportunities", "true_rate"])
     df.attrs["labels"] = ("pressures", "pass-rush snaps", "pressure rate")
     return _tag(df)
+
+
+def make_dl_market(n_per_season: int = 40, seasons=range(2019, 2026), seed: int = 1010) -> pd.DataFrame:
+    """Defensive-line market for the $40M build: one row per candidate per season.
+    `projected_value` is what a value model predicted BEFORE the season (wins-above-replacement x 10);
+    `realized_value` is what happened. Cap hits partly follow projections, so bargains exist.
+    Projections are noisy, so the most attractive projections are often overstated (optimizer's curse)."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for s in seasons:
+        for i in range(n_per_season):
+            pos = "EDGE" if i < n_per_season * 0.55 else "DT"
+            true_v = float(np.clip(rng.gamma(2.2, 1.5), 0.2, None))
+            sd = float(0.3 + 0.25 * true_v * rng.uniform(0.5, 1.5))
+            proj = max(0.1, true_v + rng.normal(0, sd))
+            cap = float(np.clip(1.0 + 1.9 * proj + rng.normal(0, 2.2), 0.9, 25))
+            real = max(0.0, true_v + rng.normal(0, 0.6))
+            rows.append((f"M{s % 100:02d}{i + 1:02d}", s, pos, round(cap, 2), round(proj, 2), round(sd, 2), round(real, 2)))
+    return _tag(pd.DataFrame(rows, columns=["player_id", "season", "position", "cap_hit_m",
+                                            "projected_value", "value_sd", "realized_value"]))

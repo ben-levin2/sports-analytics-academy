@@ -69,6 +69,7 @@ COMPARISONS = (
     ("Ridge regression vs hierarchical modeling", 5, "L5.4"),
     ("Mixed-effects vs hierarchical Bayes", 5, "L5.6"),
     ("EM vs MCMC", 5, "L5.1–L5.2"),
+    ("Bayesian optimization vs random search vs exact solvers", 6, "L6.1–L6.2"),
     ("Gaussian processes vs ordinary regression", 3, "L3.7"),
     ("HMMs vs LSTMs", 4, "L4.4"),
     ("Calibration vs discrimination", 3, "L3.1"),

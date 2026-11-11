@@ -12,7 +12,7 @@ import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 
 from academy import (archetypes, config, curriculum, data, datasets, progress, quiz, shrinkage, spatial,  # noqa: E402
-                     hierarchical, sequence, survival, validation)
+                     hierarchical, lineup, optimize, scoreboard, sequence, survival, validation)
 from academy.labs import EXERCISES  # noqa: E402
 from academy.lessons import LOAD_ERRORS, all_lessons  # noqa: E402
 from academy.projects_data import PROJECTS  # noqa: E402
@@ -67,9 +67,9 @@ def test_lab_solution_passes_and_starter_runs(ex):
     assert run_code(ex.starter)["error"] is None
 
 
-@pytest.mark.parametrize("p", [p for p in PROJECTS if p.learning.code], ids=lambda p: p.id)
-def test_project_learning_code_runs(p):
-    assert run_code(p.learning.code)["error"] is None
+def test_every_project_has_an_interactive_page():
+    from academy.views.projects import INTERACTIVE
+    assert {p.id for p in PROJECTS} <= set(INTERACTIVE)
 
 
 # ---------------------------------------------------------------- shrinkage engine + gates
@@ -217,6 +217,49 @@ def test_statsmodels_is_required_and_pymc_optional():
     import statsmodels  # noqa: F401
 
 
+def test_all_28_concepts_have_lessons_and_every_project_is_built():
+    taught = {cid for l in all_lessons() for cid in l.concept_ids}
+    assert taught == set(curriculum.CONCEPT_BY_ID)
+    assert all(p.status == "built" for p in PROJECTS)
+
+
+def test_bayesian_optimization_engine():
+    import numpy as np
+    ei = optimize.expected_improvement(np.array([1.0, 2.0, 2.0]), np.array([0.1, 0.1, 1.0]), best=1.5)
+    assert ei[0] > ei[2] > ei[1]                                       # promising > uncertain > bad-and-certain
+    f = lambda x: (x[0] - 0.3) ** 2 + (x[1] - 0.7) ** 2
+    X, y = optimize.bayes_opt(f, [[0, 1], [0, 1]], n_init=4, n_iter=10, seed=0, n_cand=500)
+    assert y.min() < 0.01
+    tune = optimize.tuning_objective()
+    assert tune([0.0, 1.0]) < tune([4.0, 1.0]) and tune([0.0, 1.0]) < tune([0.0, 0.0])
+
+
+def test_lineup_engine_and_backtest():
+    import numpy as np
+    m = data.make_dl_market()
+    pool = m[m["season"] == 2025].reset_index(drop=True)
+    x = lineup.exact(pool)
+    g = lineup.greedy(pool)
+    assert lineup.feasible(pool, x) and lineup.feasible(pool, g)
+    assert lineup.total(pool, x) >= lineup.total(pool, g) - 1e-9
+    assert lineup.random_search(pool, 15, seed=0)[-1] <= lineup.total(pool, x) + 1e-9
+    assert lineup.bayes_opt(pool, 15, seed=0)[-1] <= lineup.total(pool, x) + 1e-9
+    res = lineup.backtest(m)
+    assert res["ok"] and res["leak_ok"] and res["n_seasons"] >= 3 and 0.5 < res["realized_ratio"] < 1.2
+    gl = lineup.gates(res, {"source": "upload", "real": True})
+    assert lineup.verdict(gl) == "Learning Lab only"                   # input-model gate can't be automated
+
+
+def test_scoreboard_and_registration():
+    row = scoreboard.run_one("p6a")
+    assert row["beats"] in (True, False) and row["gates"]
+    s = progress.default_state()
+    progress.set_registration(s, "p6b", {"question": "q", "primary": "p5", "metric": "m", "baseline": "b"})
+    assert s["projects"]["p6b"]["registration"]["primary"] == "p5" and "ts" in s["projects"]["p6b"]["registration"]
+    merged = progress.merge(progress.default_state(), progress.from_json(progress.to_json(s)))
+    assert merged["projects"]["p6b"]["registration"]["question"] == "q"
+
+
 def test_torch_is_optional():
     req = (ROOT / "requirements.txt").read_text()
     assert "torch" not in req
@@ -283,7 +326,7 @@ def test_lesson_completion_and_concept_mastery_are_separate():
     progress.record_attempt(s, l.id, l.title, 0.0, 0, len(l.quiz), weak)
     assert progress.is_mastered(s, l.id)                       # best attempt still counts for the lesson
     assert curriculum.concept_status(s, cid) == "learning"     # latest attempt drives the concept
-    assert curriculum.concept_status(s, "bayesian-optimization") == "planned"
+    assert all(curriculum.concept_status(s, c.id) != "planned" for c in curriculum.CONCEPTS)
 
 
 def test_persistence_roundtrip_merge_and_corrupt_file():
@@ -338,12 +381,16 @@ def test_app_pages_projects_and_quiz_flow():
     assert not at.exception
     assert at.session_state["progress"]["projects"]["p2-archetypes"]["runs"][-1]["verdict"].startswith("Learning Lab only")
     for pid, btn in [("p3a-time-to-contribution", "p3a_eval"), ("p3b-geographic-recruiting", "p3b_eval"),
-                     ("p4-game-by-game", "p4_eval"), ("p5-hierarchical-development", "p5_eval")]:
+                     ("p4-game-by-game", "p4_eval"), ("p5-hierarchical-development", "p5_eval"),
+                     ("p6a-lineup-optimization", "p6a_eval")]:
         at.selectbox(key="proj_pick").set_value(pid).run()
         assert not at.exception, (pid, at.exception)
         at.button(key=btn).click().run()
         assert not at.exception, (pid, at.exception)
         assert at.session_state["progress"]["projects"][pid]["runs"][-1]["verdict"].startswith("Learning Lab only")
+
+    at.selectbox(key="proj_pick").set_value("p6b-integrated-research").run()
+    assert not at.exception
 
     at.sidebar.radio(key="nav").set_value("Lessons").run()
     for lesson in all_lessons():

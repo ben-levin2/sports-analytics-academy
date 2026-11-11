@@ -128,11 +128,14 @@ SPECS = {s.id: s for s in [
          {"Game logs with hidden hot/cold form (~3,700 games)": data.make_game_logs}, ["P4"], _check_games,
          numeric=["season", "week", "grade"]),
     Spec("lineup_candidates", "Lineup candidates with costs",
-         "One row per candidate player with a cost and an estimated value.",
-         {"player_id": "unique player key", "position": "position group", "cap_hit_m": "cost in $M", "value": "estimated value"},
-         {"value_sd": "uncertainty of the value estimate"},
-         {"Defensive-line candidates": data.make_dl_free_agents}, ["P6A"],
-         numeric=["cap_hit_m", "value"]),
+         "One row per candidate (per season): position, cap hit, a PRE-SEASON projected value, and optionally "
+         "what actually happened (realized_value) for back-testing.",
+         {"player_id": "unique player key", "position": "EDGE or DT", "cap_hit_m": "cap hit in $M",
+          "projected_value": "value projected before the season"},
+         {"value_sd": "uncertainty of the projection", "season": "season (needed for back-tests)",
+          "realized_value": "value actually produced (needed for back-tests)"},
+         {"$40M D-line market (40 candidates x 7 seasons)": data.make_dl_market}, ["P6A"],
+         numeric=["cap_hit_m", "projected_value"]),
 ]}
 
 
