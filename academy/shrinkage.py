@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from scipy import optimize, stats
 
+from . import validation as V
+
 PRIMARY_METRIC = ("Opportunity-weighted mean squared error of the predicted next-season rate "
                   "(lower is better). Registered in code before any data is evaluated.")
 INTERVAL = 0.80          # nominal coverage for the calibration gate
@@ -15,6 +17,9 @@ CAL_TOLERANCE = 0.05     # coverage must be within +/- 5 points of nominal
 MIN_GAIN = 0.02          # must beat the best baseline by at least 2% of its error
 MIN_TEST_SEASONS = 3
 MIN_TEST_ROWS = 200
+MAX_ECE = 0.05           # calibration gate for the "top-third next season" probabilities
+EVENT = ("Top-third season: next-season rate at or above the top-third cutoff of the most recent "
+         "training season (qualifiers only). Cutoff and qualifying volume are fixed before the test season.")
 
 
 def fit_beta_prior(k, n):
@@ -67,19 +72,19 @@ def evaluate_next_season(df: pd.DataFrame, group: str | None = None) -> dict:
     """Rolling-origin validation. For each season T: fit the prior on seasons < T only, use each
     player's seasons < T as his history, and predict his season-T rate. Never touches T's data
     until scoring."""
-    seasons = sorted(df["season"].unique())
     rows, leak_ok = [], True
-    for T in seasons[1:]:
-        train = df[df["season"] < T]
-        test = df[df["season"] == T]
+    for T, train, test in V.rolling_origin(df, "season"):
         if train.empty or test.empty:
             continue
-        if train["season"].max() >= T:          # explicit leakage check
-            leak_ok = False
+        leak_ok &= V.no_leakage(train, test, "season")
         priors = fit_priors(train, group)
         keys = ["player_id"] + ([group] if group else [])
         hist = train.groupby(keys, as_index=False)[["successes", "opportunities"]].sum()
-        m = test.merge(hist, on=keys, suffixes=("", "_hist"))
+        last_season = train["season"].max()
+        recent = train[train["season"] == last_season]
+        last = (train.sort_values("season").groupby(keys, as_index=False).last()
+                .assign(last_rate=lambda d: d["successes"] / d["opportunities"])[keys + ["last_rate"]])
+        m = test.merge(hist, on=keys, suffixes=("", "_hist")).merge(last, on=keys, how="left")
         if m.empty:
             continue
         if group:
@@ -91,12 +96,22 @@ def evaluate_next_season(df: pd.DataFrame, group: str | None = None) -> dict:
         a = ab[:, 0] + m["successes_hist"].to_numpy()
         b = ab[:, 1] + (m["opportunities_hist"] - m["successes_hist"]).to_numpy()
         n_t = m["opportunities"].to_numpy()
+        k_t = m["successes"].to_numpy()
         lo, hi = stats.betabinom.interval(INTERVAL, n_t, a, b)
+        # Binary event (concept 25): cutoff and qualifying volume come from the last TRAINING season
+        q_min = float(recent["opportunities"].median())
+        qual = recent[recent["opportunities"] >= q_min]
+        cut = float((qual["successes"] / qual["opportunities"]).quantile(2 / 3))
+        need = np.ceil(cut * n_t).astype(int)
         rows.append(pd.DataFrame({
-            "season": T, "n": n_t, "actual": m["successes"].to_numpy() / n_t,
+            "season": T, "n": n_t, "actual": k_t / n_t,
             "raw": (m["successes_hist"] / m["opportunities_hist"]).to_numpy(),
             "population": pop.to_numpy(), "model": a / (a + b),
-            "covered": (m["successes"].to_numpy() >= lo) & (m["successes"].to_numpy() <= hi),
+            "covered": (k_t >= lo) & (k_t <= hi),
+            "qualifies": n_t >= q_min, "event": (k_t >= need).astype(int),
+            "p_event": stats.betabinom.sf(need - 1, n_t, a, b),
+            "last_rate": m["last_rate"].to_numpy(),
+            "base_rate": float(((qual["successes"] / qual["opportunities"]) >= cut).mean()),
         }))
     if not rows:
         return {"ok": False, "reason": "Need players who appear in at least two different seasons."}
@@ -113,8 +128,17 @@ def evaluate_next_season(df: pd.DataFrame, group: str | None = None) -> dict:
     gain = 1 - overall["model"] / best_base
     wins = int((per["model"] < per[["raw", "population"]].min(axis=1)).sum())
     coverage = float(r["covered"].mean())
+    e = r[r["qualifies"]]
+    prob = {"n": len(e), "event_rate": float(e["event"].mean()),
+            "brier": V.brier(e["p_event"], e["event"]),
+            "brier_base": V.brier(e["base_rate"], e["event"]),
+            "skill": V.brier_skill(e["p_event"], e["event"], e["base_rate"]),
+            "ece": V.ece(e["p_event"], e["event"]),
+            "reliability": V.reliability_table(e["p_event"], e["event"]),
+            "auc_model": V.auc(e["p_event"], e["event"]),
+            "auc_last_season": V.auc(e["last_rate"], e["event"])}
     return {"ok": True, "rows": r, "per_season": per, "overall": overall, "gain": gain,
-            "wins": wins, "n_seasons": len(per), "coverage": coverage, "leak_ok": leak_ok}
+            "wins": wins, "n_seasons": len(per), "coverage": coverage, "leak_ok": leak_ok, "prob": prob}
 
 
 def gates(result: dict, data_info: dict) -> list:
@@ -128,16 +152,21 @@ def gates(result: dict, data_info: dict) -> list:
          else ("Marked as real on upload." if is_real else "Upload is not marked as real data.")),
         ("Baseline defined", True, "Two baselines: player's raw past rate, and the population/position mean."),
         ("Metric predefined", True, PRIMARY_METRIC),
-        ("Out-of-sample, time-based validation",
+        ("Time-based validation (concept 26)",
          result["n_seasons"] >= MIN_TEST_SEASONS and len(result["rows"]) >= MIN_TEST_ROWS,
-         f"{result['n_seasons']} test seasons, {len(result['rows'])} player-seasons "
-         f"(need >= {MIN_TEST_SEASONS} and >= {MIN_TEST_ROWS})."),
+         f"Rolling origin: train on all seasons before T, test on T. {result['n_seasons']} test seasons, "
+         f"{len(result['rows'])} player-seasons (need >= {MIN_TEST_SEASONS} and >= {MIN_TEST_ROWS})."),
         ("Beats the best baseline",
          result["gain"] >= MIN_GAIN and result["wins"] > result["n_seasons"] / 2,
          f"{result['gain']:+.1%} vs best baseline overall; wins {result['wins']} of {result['n_seasons']} seasons "
          f"(need >= {MIN_GAIN:.0%} and a majority)."),
-        ("No temporal leakage", bool(result["leak_ok"]), "Prior and history use only seasons before the test season."),
-        ("Calibrated uncertainty", abs(result["coverage"] - INTERVAL) <= CAL_TOLERANCE,
+        ("No temporal leakage (concept 26)", bool(result["leak_ok"]),
+         "Checked on every fold: prior, player history, top-third cutoff and qualifying volume use only earlier seasons."),
+        ("Calibrated probabilities (concept 25)",
+         result["prob"]["ece"] <= MAX_ECE and result["prob"]["skill"] > 0,
+         f"P(top-third next season): calibration error {result['prob']['ece']:.3f} (need <= {MAX_ECE}), "
+         f"Brier skill vs base rate {result['prob']['skill']:+.1%} (need > 0)."),
+        ("Calibrated intervals", abs(result["coverage"] - INTERVAL) <= CAL_TOLERANCE,
          f"{INTERVAL:.0%} predictive intervals covered {result['coverage']:.1%} of outcomes "
          f"(need {INTERVAL - CAL_TOLERANCE:.0%}–{INTERVAL + CAL_TOLERANCE:.0%})."),
     ]

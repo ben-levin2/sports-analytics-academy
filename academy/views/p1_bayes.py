@@ -6,6 +6,7 @@ import streamlit as st
 from scipy import stats
 
 from .. import datasets, progress, shrinkage as S, theme as T, ui
+from .. import validation as V
 
 LABELS = {"QB completion %": ("completions", "pass attempts", "completion rate"),
           "LB tackle share": ("tackles", "team tackles while active", "tackle share"),
@@ -193,5 +194,26 @@ def production_candidate(project):
     ax.set_xlabel("Test season (trained only on earlier seasons)"), ax.set_ylabel("Weighted MSE"), ax.legend(fontsize=8)
     ui.show_fig(fig)
     st.dataframe(per.rename(columns={"test_rows": "player-seasons"}).round(6), hide_index=True)
+    st.caption("Concept 26: each row is one rolling-origin fold. Everything used to predict season T "
+               "was computed from seasons before T, and this is checked on every fold.")
+
+    st.markdown("#### Probability check: P(top-third season next year) · concept 25")
+    pr = res["prob"]
+    st.caption(S.EVENT)
+    m = st.columns(4)
+    m[0].metric("Brier score", f"{pr['brier']:.3f}", f"base rate {pr['brier_base']:.3f}", delta_color="off")
+    m[1].metric("Brier skill vs base rate", f"{pr['skill']:+.1%}")
+    m[2].metric("Calibration error (ECE)", f"{pr['ece']:.3f}", f"gate <= {S.MAX_ECE}", delta_color="off")
+    m[3].metric("AUC: model vs 'same as last season'", f"{pr['auc_model']:.3f} vs {pr['auc_last_season']:.3f}")
+    t = pr["reliability"]
+    fig, ax = plt.subplots(figsize=(5.5, 3.2))
+    ax.plot([0, 1], [0, 1], color=T.MUTED, ls="--", lw=1.2, label="Perfect calibration")
+    ax.plot(t["predicted"], t["observed"], marker="o", color=T.BLUE, lw=2.2, label="Shrinkage model")
+    ax.set_xlim(0, 1), ax.set_ylim(0, 1), ax.set_xlabel("Forecast probability"), ax.set_ylabel("Observed frequency")
+    ax.legend(loc="upper left", fontsize=8)
+    ui.show_fig(fig)
+    st.caption(f"{pr['n']} qualifying player-seasons; {pr['event_rate']:.0%} had a top-third season. "
+               "The forecast assumes his next-season volume is known (it predicts the rate, not the playing time). "
+               "AUC is reported for comparison with your Model 9 baseline; it is not a gate.")
     st.caption("Passing every gate is necessary, not sufficient. Before using a result, check that the test seasons "
                "look like the seasons you care about, and that nothing changed in how the stat is recorded.")

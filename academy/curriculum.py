@@ -69,9 +69,10 @@ COMPARISONS = (
     ("Ridge regression vs hierarchical modeling", 5, "planned"),
     ("Gaussian processes vs ordinary regression", 3, "planned"),
     ("HMMs vs LSTMs", 4, "planned"),
-    ("Calibration vs discrimination", 3, "planned"),
+    ("Calibration vs discrimination", 3, "L3.1"),
     ("Prediction intervals vs confidence vs credible intervals", 1, "L1.4 (intro); full in Level 4"),
     ("Marginal likelihood vs cross-validation", 1, "L1.5"),
+    ("Random splits vs time-based validation", 3, "L3.2"),
 )
 
 

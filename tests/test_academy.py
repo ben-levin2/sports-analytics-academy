@@ -11,7 +11,7 @@ sys.path.insert(0, str(ROOT))
 import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 
-from academy import config, curriculum, data, datasets, progress, quiz, shrinkage  # noqa: E402
+from academy import config, curriculum, data, datasets, progress, quiz, shrinkage, validation  # noqa: E402
 from academy.labs import EXERCISES  # noqa: E402
 from academy.lessons import LOAD_ERRORS, all_lessons  # noqa: E402
 from academy.projects_data import PROJECTS  # noqa: E402
@@ -80,6 +80,30 @@ def test_shrinkage_evaluation_and_gates():
     sim_gates = shrinkage.gates(res, {"source": "simulated", "real": False})
     assert shrinkage.verdict(sim_gates) == "Learning Lab only"       # simulated can never pass
     assert "production-ready" not in shrinkage.verdict(shrinkage.gates(res, {"source": "upload", "real": True})).lower()
+
+
+def test_validation_helpers():
+    import numpy as np
+    y = np.array([1, 0, 0, 1])
+    assert abs(validation.brier([0.9, 0.2, 0.6, 1.0], y) - (0.01 + 0.04 + 0.36 + 0) / 4) < 1e-12
+    assert validation.brier_skill(y.astype(float), y, 0.5) == 1.0
+    assert validation.ece(np.full(200, 0.3), np.r_[np.ones(60), np.zeros(140)]) < 1e-9
+    assert validation.auc([0.1, 0.9, 0.8, 0.2], [0, 1, 1, 0]) == 1.0
+    df = data.make_qb_completions()
+    folds = list(validation.rolling_origin(df))
+    assert len(folds) == df["season"].nunique() - 1
+    assert all(validation.no_leakage(tr, te) for _, tr, te in folds)
+    assert not validation.no_leakage(df, df[df["season"] == 2020])
+
+
+def test_calibration_and_time_gates_are_wired_in():
+    res = shrinkage.evaluate_next_season(data.make_pressure_by_position(), "position")
+    names = [n for n, _, _ in shrinkage.gates(res, {"source": "upload", "real": True})]
+    assert "Calibrated probabilities (concept 25)" in names
+    assert "Time-based validation (concept 26)" in names and "No temporal leakage (concept 26)" in names
+    p = res["prob"]
+    assert 0 <= p["ece"] <= 1 and p["skill"] > 0 and len(p["reliability"]) == 5
+    assert 0.25 < p["event_rate"] < 0.42
 
 
 def test_posterior_table_shrinks_low_volume_more():
