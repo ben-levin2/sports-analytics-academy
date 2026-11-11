@@ -45,7 +45,7 @@ Six levels, **28 tracked concepts**. The four predictive-modeling methods sit in
 | 5 Advanced Statistical Modeling | 21–23, **27 Mixed-effects models** | P5 Hierarchical Player Development |
 | 6 Optimization & Research | 24 | P6A Constrained Lineup Optimization, P6B Integrated Research |
 
-Built now: all 28 concepts have lessons (32 lessons across six levels), all 8 projects (P1–P6B) have interactive Learning Lab pages and automated Production Candidate checks, the Integrated Research Project runs a scoreboard across every level, and there are 12 Python Lab exercises. Only NumPy, SciPy, scikit-learn, statsmodels (plus Streamlit, pandas, Matplotlib) are required; PyTorch and PyMC are optional.
+Built now: all 33 concepts have lessons (37 lessons across six levels), including the small-data set (concepts 29–33: regularization, Bayesian logistic with informative priors, monotonic GAMs, transfer learning, discrete-time survival). All 9 projects (P1–P6B, including P3C Small-Data Draft Model) have interactive Learning Lab pages and automated Production Candidate checks, the Integrated Research Project runs a scoreboard across every level, and there are 12 Python Lab exercises. Only NumPy, SciPy, scikit-learn, statsmodels (plus Streamlit, pandas, Matplotlib) are required; PyTorch and PyMC are optional.
 
 ## Progress rules
 
@@ -88,7 +88,7 @@ Run `pytest -q` after any change.
 ```
 app.py                     entry point, sidebar navigation
 academy/config.py          thresholds, paths, timezone
-academy/curriculum.py      6 levels, 28 concepts, concept mastery, recommendations
+academy/curriculum.py      6 levels, 33 concepts, concept mastery, recommendations
 academy/progress.py        persistence and lesson status (no Streamlit, testable)
 academy/datasets.py        dataset registry: upload > configured path > simulated
 academy/data.py            simulated football data generators

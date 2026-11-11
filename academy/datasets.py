@@ -82,6 +82,31 @@ def _check_profiles(df):
     return errs
 
 
+def _check_draft(df):
+    errs = []
+    if not df["drafted"].isin([0, 1]).all():
+        errs.append("drafted must be 0 or 1.")
+    if not df["year1_percentile"].between(0, 100).all():
+        errs.append("year1_percentile must be between 0 and 100.")
+    if df["player_id"].duplicated().any():
+        errs.append("Duplicate player_id rows. Use one row per recruit.")
+    if "draft_year" in df.columns:
+        dy = pd.to_numeric(df["draft_year"], errors="coerce")
+        if (dy.notna() & (df["drafted"] == 0)).any():
+            errs.append("draft_year is filled in for some rows with drafted = 0.")
+        if (dy.notna() & (dy < df["class_year"] + 3)).any():
+            errs.append("Some draft_year values are less than 3 years after class_year.")
+    return errs
+
+
+def _draft_small():
+    return data.make_draft_classes(per_class=12, seed=31)
+
+
+def _draft_noisy():
+    return data.make_draft_classes(noise=1.0, seed=33)
+
+
 SPECS = {s.id: s for s in [
     Spec("rate_events", "Player rate stats by season",
          "One row per player-season with a count of successes out of opportunities "
@@ -127,6 +152,18 @@ SPECS = {s.id: s for s in [
          {},
          {"Game logs with hidden hot/cold form (~3,700 games)": data.make_game_logs}, ["P4"], _check_games,
          numeric=["season", "week", "grade"]),
+    Spec("draft_outcomes", "Recruits and draft outcomes (small data)",
+         "One row per recruit: rating at signing, year-1 production percentile, and whether he was drafted. "
+         "Add draft_year to let the survival model use unfinished classes.",
+         {"player_id": "unique player key", "class_year": "recruiting class (year he enrolled)",
+          "position": "position", "rating": "recruiting rating at signing (any scale)",
+          "year1_percentile": "year-1 production percentile, 0-100", "drafted": "1 = drafted, 0 = not (yet)"},
+         {"draft_year": "year he was drafted (blank if not); needed for the survival model and for knowing "
+                        "which classes are finished"},
+         {"One program, 22 recruits a class": data.make_draft_classes,
+          "Small program, 12 recruits a class": _draft_small,
+          "Noisy inputs (1 SD of measurement error)": _draft_noisy}, ["P3C"], _check_draft,
+         numeric=["class_year", "rating", "year1_percentile", "drafted"]),
     Spec("lineup_candidates", "Lineup candidates with costs",
          "One row per candidate (per season): position, cap hit, a PRE-SEASON projected value, and optionally "
          "what actually happened (realized_value) for back-testing.",

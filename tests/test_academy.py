@@ -22,8 +22,9 @@ from academy.runner import run_code  # noqa: E402
 # ---------------------------------------------------------------- curriculum integrity
 def test_28_concepts_six_levels():
     nums = sorted(c.num for c in curriculum.CONCEPTS)
-    assert nums == list(range(1, 29))
-    assert len(curriculum.CONCEPT_BY_ID) == 28
+    assert nums == list(range(1, 34))                     # the original 28 plus small-data concepts 29-33
+    assert len(curriculum.CONCEPT_BY_ID) == 33
+    assert [c.num for c in curriculum.CONCEPTS[:28]] == list(range(1, 29))   # originals unchanged, in order
     assert {c.level for c in curriculum.CONCEPTS} == {1, 2, 3, 4, 5, 6}
     assert len(curriculum.LEVELS) == 6
 
@@ -410,3 +411,82 @@ def test_app_pages_projects_and_quiz_flow():
     assert not at.exception
     st_ = at.session_state["progress"]
     assert progress.is_mastered(st_, l.id) and curriculum.concept_status(st_, l.concept_ids[0]) == "mastered"
+
+
+# ---------------------------------------------------------------- small-data modeling (concepts 29-33, P3C)
+def test_ridge_equals_normal_prior():
+    import numpy as np
+    from sklearn.linear_model import LogisticRegression
+    from academy import smalldata as SD
+    df = data.make_draft_classes()
+    tr = df[df["class_year"] <= 2013]
+    d = SD.Design(tr)
+    X = d.linear(tr)
+    sk = LogisticRegression(C=0.5, max_iter=5000).fit(X[:, 1:], tr["drafted"])
+    mine = SD.fit_logistic(X, tr["drafted"], prior_sd=np.r_[100.0, np.full(X.shape[1] - 1, np.sqrt(0.5))])
+    assert np.allclose(mine["beta"][1:], sk.coef_[0], atol=2e-3)
+
+
+def test_monotone_gam_never_decreases():
+    import numpy as np
+    from academy import smalldata as SD
+    df = data.make_draft_classes()
+    tr = df[df["class_year"] <= 2013]
+    d = SD.Design(tr)
+    grid = np.linspace(-3, 3, 121)
+    m = SD.fit_monotone_gam(d, tr, tr["drafted"].to_numpy(), lam=0.05)
+    for which in ("rating", "year1"):
+        assert (np.diff(SD.gam_curve(m, which, grid)) >= -1e-9).all()
+
+
+def test_person_period_censoring():
+    import numpy as np
+    from academy import smalldata as SD
+    df = pd.DataFrame({"player_id": ["a", "b", "c", "d"], "class_year": [2015, 2015, 2019, 2021],
+                       "position": "QB", "rating": 0.9, "year1_percentile": 50.0,
+                       "drafted": [1, 0, 0, 0], "draft_year": [2019.0, np.nan, np.nan, np.nan]})
+    pp = SD.person_period(df, as_of=2022)
+    rows = pp.groupby("player_id")["period"].apply(list).to_dict()
+    assert rows == {"a": [3, 4], "b": [3, 4, 5], "c": [3]}           # a drafted in year 4; c censored; d not yet eligible
+    assert pp.loc[pp["player_id"] == "a", "event"].tolist() == [0, 1]
+    assert pp.loc[pp["player_id"] != "a", "event"].sum() == 0
+
+
+def test_survival_uses_unfinished_classes_without_bias():
+    import numpy as np
+    from academy import smalldata as SD
+    later = data.make_draft_classes(per_class=60, data_end=2035)
+    now = data.make_draft_classes(per_class=60, data_end=2022)
+    truth = later[later["class_year"] <= 2021]["drafted"].mean()
+    upto = now[now["class_year"] <= 2021]
+    h = SD.person_period(upto, 2022).groupby("period")["event"].mean()
+    est = 1 - np.prod(1 - h)
+    assert abs(est - truth) < abs(upto["drafted"].mean() - truth)      # beats 'not yet = never'
+
+
+def test_draft_model_evaluation_and_gates():
+    from academy import smalldata as SD
+    df = data.make_draft_classes()
+    res = SD.evaluate(df, boot=200)
+    assert res["ok"] and res["leak_ok"] and res["n_classes"] >= SD.MIN_TEST_CLASSES
+    assert set(SD.MODELS) <= set(res["summary"].index)
+    assert all(a < b for a, b in zip(res["train_rows_full"], res["train_players_survival"]))
+    for m in SD.CHALLENGERS:
+        gl = SD.gates(res, {"source": "simulated", "real": False}, m)
+        assert SD.verdict(gl) == "Learning Lab only"                       # simulated data can never pass
+    no_dy = df.drop(columns="draft_year")
+    res2 = SD.evaluate(no_dy, boot=50)
+    assert res2["ok"] and "survival" not in res2["summary"].index
+    assert SD.verdict(SD.gates(res2, {"source": "upload", "real": True}, "survival")) == "Learning Lab only"
+
+
+def test_draft_upload_validation():
+    df = data.make_draft_classes().drop(columns=["true_z_rating", "true_year1"])
+    bad = df.copy()
+    bad.loc[0, "drafted"] = 2
+    assert datasets.save_upload("draft_outcomes", bad, "bad", True)
+    assert datasets.save_upload("draft_outcomes", df.drop(columns="year1_percentile"), "bad", True)
+    assert datasets.save_upload("draft_outcomes", df, "mine", True) == []
+    loaded, info = datasets.load("draft_outcomes")
+    assert info["source"] == "upload" and info["real"] and len(loaded) == len(df)
+    datasets.remove_upload("draft_outcomes")

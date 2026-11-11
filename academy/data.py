@@ -365,3 +365,47 @@ def make_dl_market(n_per_season: int = 40, seasons=range(2019, 2026), seed: int 
             rows.append((f"M{s % 100:02d}{i + 1:02d}", s, pos, round(cap, 2), round(proj, 2), round(sd, 2), round(real, 2)))
     return _tag(pd.DataFrame(rows, columns=["player_id", "season", "position", "cap_hit_m",
                                             "projected_value", "value_sd", "realized_value"]))
+
+
+DRAFT_POSITIONS = ["QB", "RB", "WR", "TE", "OL", "DL", "LB", "DB"]
+_DRAFT_POS_EFFECT = {"QB": -0.2, "RB": -0.1, "WR": 0.0, "TE": 0.0, "OL": 0.3, "DL": 0.4, "LB": 0.0, "DB": 0.2}
+
+
+def draft_true_logit(z_rating, year1_percentile, position):
+    """The hidden truth behind make_draft_classes: P(drafted within 5 years) on the log-odds scale.
+    Rising in both rating and year-1 percentile, curved (not a straight line) in each."""
+    z = np.asarray(z_rating, float)
+    y1 = np.asarray(year1_percentile, float)
+    pos = np.array([_DRAFT_POS_EFFECT.get(p, 0.0) for p in np.atleast_1d(position)])
+    return -3.4 + 0.7 * z + 0.6 * np.maximum(z - 1.0, 0) + 2.4 / (1 + np.exp(-(y1 - 75) / 7)) + pos
+
+
+def make_draft_classes(per_class: int = 22, noise: float = 0.0, seed: int = 29,
+                       first_class: int = 2008, last_class: int = 2025, data_end: int = 2026,
+                       shift: float = 0.0) -> pd.DataFrame:
+    """One program's recruits, one row each: rating at signing, year-1 production percentile, and whether
+    he was drafted. Players become draft-eligible 3 years after enrolling and are drafted in year 3, 4 or 5.
+    Classes whose window hasn't closed by `data_end` are UNFINISHED: drafted = 0 may still become 1.
+    `noise` adds measurement error (in SDs) to the two inputs the models see. `shift` moves this program's
+    draft odds up or down (log-odds) without changing what the inputs mean."""
+    rng = np.random.default_rng(seed)
+    rows, pid = [], 0
+    for cls in range(first_class, last_class + 1):
+        for _ in range(per_class):
+            pid += 1
+            z = float(rng.normal())
+            rating = float(np.clip(0.86 + 0.035 * z, 0.75, 0.999))
+            talent = 0.6 * z + 0.8 * rng.normal()
+            y1 = float(np.clip(100 / (1 + np.exp(-1.6 * talent)), 1, 99))
+            pos = str(rng.choice(DRAFT_POSITIONS))
+            p = 1 / (1 + np.exp(-(draft_true_logit(z, y1, [pos])[0] + shift)))
+            drafted = rng.random() < p
+            k = int(rng.choice([3, 4, 5], p=[0.5, 0.35, 0.15])) if drafted else None
+            seen = drafted and cls + k <= data_end
+            r_obs = rating + noise * 0.035 * rng.normal()
+            y1_obs = float(np.clip(y1 + noise * 25 * rng.normal(), 0, 100))
+            rows.append((f"D{pid:05d}", cls, pos, round(r_obs, 4), round(y1_obs, 1), int(seen),
+                         float(cls + k) if seen else np.nan, round(z, 4), round(y1, 1)))
+    df = pd.DataFrame(rows, columns=["player_id", "class_year", "position", "rating", "year1_percentile",
+                                     "drafted", "draft_year", "true_z_rating", "true_year1"])
+    return _tag(df)

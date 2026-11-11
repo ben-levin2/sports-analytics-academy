@@ -1,4 +1,4 @@
-"""The six levels and 28 tracked concepts, plus helpers that combine content with progress.
+"""The six levels and 33 tracked concepts, plus helpers that combine content with progress.
 
 Two separate measures:
 - Lesson completion  = your BEST quiz score on a lesson (>= 70% completed, >= 90% mastered).
@@ -60,6 +60,12 @@ CONCEPTS = (
     _C(26, "time-based-cv", "Time-based cross-validation", 3, "Train on earlier seasons, test on later ones, never leak the future."),
     _C(27, "mixed-effects", "Mixed-effects models", 5, "Fixed + random effects: the frequentist cousin of hierarchical Bayes."),
     _C(28, "conformal-prediction", "Conformal prediction", 4, "Prediction intervals with a coverage guarantee."),
+    # Small-data modeling (added after the original 28)
+    _C(29, "regularization", "Regularization (ridge / L2)", 1, "A penalty on big slopes, which is really a prior: the fix for overfitting small data."),
+    _C(30, "bayesian-logistic", "Bayesian logistic regression with informative priors", 1, "Yes/no models that start from what you already know about the signs and sizes of effects."),
+    _C(31, "monotonic-gam", "GAMs and monotonic constraints", 3, "Smooth curves that are only allowed to go one direction."),
+    _C(32, "transfer-learning", "Transfer learning for small data", 5, "Learn on a large related problem, then adapt to your small one."),
+    _C(33, "discrete-time-survival", "Discrete-time survival models", 3, "Person-period rows, so unfinished outcomes still count as information."),
 )
 CONCEPT_BY_ID = {c.id: c for c in CONCEPTS}
 
@@ -78,6 +84,11 @@ COMPARISONS = (
     ("Random splits vs time-based validation", 3, "L3.2"),
     ("Kaplan-Meier vs Cox vs logistic regression", 3, "L3.3–L3.4"),
     ("RBF vs Matérn kernels", 3, "L3.6"),
+    ("Ridge vs plain logistic regression with little data", 1, "L1.7"),
+    ("Informative priors vs flat priors", 1, "L1.8"),
+    ("Monotonic GAMs vs straight lines vs trees", 3, "L3.9"),
+    ("Discrete-time survival vs logistic on finished classes", 3, "L3.10"),
+    ("Transfer learning vs training from scratch vs pooling", 5, "L5.7"),
 )
 
 

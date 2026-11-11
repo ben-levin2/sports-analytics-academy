@@ -2,12 +2,13 @@ import streamlit as st
 
 from .. import curriculum, datasets, progress, ui
 from ..projects_data import PROJECTS
-from . import p1_bayes, p2_archetypes, p3_level3, p4_games, p5_hierarchical, p6_level6
+from . import p1_bayes, p2_archetypes, p3_level3, p3c_draft, p4_games, p5_hierarchical, p6_level6
 
 INTERACTIVE = {"p1-bayesian-player-evaluation": (p1_bayes.learning_lab, p1_bayes.production_candidate),
                "p2-archetypes": (p2_archetypes.learning_lab, p2_archetypes.production_candidate),
                "p3a-time-to-contribution": (p3_level3.survival_lab, p3_level3.survival_prod),
                "p3b-geographic-recruiting": (p3_level3.spatial_lab, p3_level3.spatial_prod),
+               "p3c-small-data-draft": (p3c_draft.learning_lab, p3c_draft.production_candidate),
                "p4-game-by-game": (p4_games.learning_lab, p4_games.production_candidate),
                "p5-hierarchical-development": (p5_hierarchical.learning_lab, p5_hierarchical.production_candidate),
                "p6a-lineup-optimization": (p6_level6.lineup_lab, p6_level6.lineup_prod),

@@ -1,4 +1,4 @@
-"""Eight projects, two per level where needed. Every project has two tracks:
+"""Nine projects, up to three per level. Every project has two tracks:
 
   Learning Lab         - exploratory, teaches a method, may use simulated data, limitations stated.
   Production Candidate - real data, defined baseline, predefined metric, out-of-sample validation,
@@ -187,6 +187,49 @@ PROJECTS = [
         questions=["Is a region producing better players, or just more players?",
                    "Does the Matérn kernel fit better than RBF? What does the length scale mean in miles?",
                    "Location adds only ~2% here. Would that change a single recruiting decision?"],
+    ),
+
+    # ------------------------------------------------------------------ LEVEL 3C
+    Project(
+        id="p3c-small-data-draft", level=3, slot="C", status="built", title="Small-Data Draft Model",
+        objective="Predict which recruits will be drafted from one program's small history, and test whether priors, monotonic curves or survival modeling beat a plain logistic regression on later classes.",
+        concept_ids=["regularization", "bayesian-logistic", "monotonic-gam", "discrete-time-survival",
+                     "calibration-brier", "time-based-cv"], dataset_id="draft_outcomes",
+        psfal="""
+**The academy is separate from PSFAL and never changes it.**
+
+- **Model 7 (being redesigned; current candidate a draft-outlook model):** this project is practice for exactly that kind of question, but it assumes nothing about Model 7's design and feeds nothing into it.
+- **Model 8 (rating plus early production, +0.087 AUC):** the inputs here are the same idea (rating and year-1 percentile). Model 8's gain came where data was thin; this project asks whether priors and curves help in the thinnest setting of all, one program's draft picks.
+- **Models 9 and 9b:** richer models lost to a simple baseline. Expect the same risk here; that's why every challenger must beat the plain logistic by +0.02 AUC with a class-level bootstrap.
+- **Your rule, built in:** the baseline, metric, priors and thresholds are fixed in code before any data is scored, and simulated data never passes.
+""",
+        learning=Track(
+            summary="Four models compete on simulated draft classes: a plain logistic baseline, a Bayesian logistic with informative priors, a monotonic GAM and a discrete-time survival model. See each one's gain, calibration, and when it fails.",
+            steps=["Run the competition at the default size (22 recruits a class).",
+                   "Read the calibration chart for the model with the biggest gain.",
+                   "Compare each model's year-1 curve with the simulated truth.",
+                   "See how many more recruits the survival model trains on.",
+                   "Run the failure study: shrink the classes, then add noise.",
+                   "Write down which model you'd pre-register before seeing real data, and why."],
+            limitations=["Simulated data: the truth is built in, and it is curved and rising, which favors the challengers' assumptions.",
+                         "The plain baseline includes position dummies; on small data that makes it a weak baseline. A rating-only model is shown for reference.",
+                         "One program's draft picks are few (about 2 a class), so every AUC here has a wide range.",
+                         "Draft eligibility is simplified to years 3, 4 and 5 after enrolling."],
+        ),
+        production=Track(
+            summary="Predict each later class one year after it enrolls, from earlier classes only; compare every challenger with the plain logistic baseline on AUC, with a class-level bootstrap and a calibration check.",
+            steps=["Upload real recruits with draft outcomes on the Data Sources page and mark them real.",
+                   "Add draft_year if you have it (needed for the survival model).",
+                   "Run the evaluation. Read every gate for every model.",
+                   "If a model passes, it is still a candidate: check it against PSFAL's own pre-set test before any use."],
+            baseline="Plain logistic regression on rating, year-1 percentile and position (no prior).",
+            metric="Pooled AUC of P(drafted within 5 years), gain over the baseline of at least +0.02, class-level bootstrap lower bound above 0, calibration error at most 0.05.",
+            validation="Each class whose draft window has closed is predicted one year after enrolling, using only outcomes known by then (concept 26).",
+            gates=STANDARD_GATES,
+        ),
+        questions=["Which challenger would you pre-register, and what result would make you drop it?",
+                   "The rating-only model is a strong reference here. Should it replace the plain logistic as the baseline?",
+                   "How many more classes would you need before a +0.02 AUC gain could clear the bootstrap reliably?"],
     ),
 
     # ------------------------------------------------------------------ LEVEL 4

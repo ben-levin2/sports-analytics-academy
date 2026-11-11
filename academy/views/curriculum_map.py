@@ -1,4 +1,4 @@
-"""Visual curriculum map: six levels, 28 concepts coloured by mastery, projects per level."""
+"""Visual curriculum map: six levels, every concept coloured by mastery, projects per level."""
 from .. import curriculum, ui
 from ..projects_data import PROJECTS
 

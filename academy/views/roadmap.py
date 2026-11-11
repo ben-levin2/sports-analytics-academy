@@ -10,7 +10,7 @@ from .curriculum_map import render_map
 def render():
     state = ui.get_state()
     ui.hero("Curriculum", "Learning roadmap",
-            "28 concepts in six levels. Each level ends in a project with a Learning Lab and a Production Candidate track.")
+            f"{len(curriculum.CONCEPTS)} concepts in six levels. Each level ends in a project with a Learning Lab and a Production Candidate track.")
     render_map(state)
     current = curriculum.current_level(state).number
 
