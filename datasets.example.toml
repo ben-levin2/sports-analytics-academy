@@ -1,0 +1,6 @@
+# Copy to datasets.toml and point any dataset at a local CSV (runs locally; Cloud has no access to your disk).
+# Keys must match dataset ids in academy/datasets.py. Uploaded CSVs on the Data Sources page take priority.
+[paths]
+# rate_events = "/Users/you/football-data/qb_seasons.csv"
+# roster_careers = "/Users/you/football-data/roster_careers.csv"
+# hometowns = "/Users/you/football-data/hometowns.csv"
