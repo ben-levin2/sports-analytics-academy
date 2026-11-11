@@ -25,9 +25,7 @@ def _load(spec_id, key):
 
 
 def _gates(gl, verdict):
-    (st.success if verdict.startswith("Meets") else st.warning)(f"**Verdict: {verdict}**")
-    ui.html("".join(f'<div class="aa-gate"><span>{"✅" if ok else "❌"}</span><span><b>{ui.esc(name)}</b><br>'
-                    f'<span class="d">{ui.esc(detail)}</span></span></div>' for name, ok, detail in gl))
+    ui.gates(gl, verdict)
 
 
 def _log(project, tag):
@@ -109,7 +107,7 @@ def survival_lab(project):
                        "95% low": np.exp(model["beta"] - 1.96 * model["se"]),
                        "95% high": np.exp(model["beta"] + 1.96 * model["se"])})
     hr["clear effect?"] = np.where((hr["95% low"] > 1) | (hr["95% high"] < 1), "yes", "no (interval includes 1)")
-    st.dataframe(hr.round(2), hide_index=True)
+    ui.table(hr)
 
     if "recruit_rating" in df.columns:
         st.markdown("#### 4 · Proportional-hazards check")
@@ -126,7 +124,7 @@ def survival_lab(project):
 
 def survival_prod(project):
     df, info = _load("roster_careers", "p3aprod")
-    if st.button("▶ Run class-by-class evaluation", type="primary", key="p3a_eval"):
+    if st.button("Run class-by-class evaluation", type="primary", key="p3a_eval"):
         st.session_state["p3a_eval_args"] = info["label"]
     if st.session_state.get("p3a_eval_args") != info["label"]:
         st.caption("Metric, baseline and gates are fixed in code before any data is evaluated.")
@@ -144,7 +142,7 @@ def survival_prod(project):
     m[1].metric("Brier: rating-tier baseline", f"{b['baseline']:.4f}")
     m[2].metric("Brier: Cox model", f"{b['cox']:.4f}", f"{res['gain']:+.1%} vs baseline")
     m[3].metric("AUC: Cox vs baseline", f"{res['auc_cox']:.3f} vs {res['auc_baseline']:.3f}")
-    st.dataframe(res["per_class"].round(4), hide_index=True)
+    ui.table(res["per_class"])
     st.markdown("**Calibration of P(contributes by season 2)**")
     _reliability(res["reliability"])
     st.caption("Each class is predicted at enrollment from earlier classes, with their outcomes cut off at the season "
@@ -179,9 +177,9 @@ def spatial_lab(project):
     df, info = _load("hometowns", "p3blab")
     st.markdown("#### 1 · Where recruits come from vs how they perform")
     fig, axes = plt.subplots(1, 2, figsize=(10, 3.4))
-    hb = axes[0].hexbin(df["lon"], df["lat"], gridsize=26, cmap="viridis", mincnt=1)
+    hb = axes[0].hexbin(df["lon"], df["lat"], gridsize=26, cmap="academy_seq", mincnt=1)
     plt.colorbar(hb, ax=axes[0]), axes[0].set_title("Player counts", fontsize=9)
-    hb2 = axes[1].hexbin(df["lon"], df["lat"], C=df["production"], gridsize=26, cmap="coolwarm", mincnt=8,
+    hb2 = axes[1].hexbin(df["lon"], df["lat"], C=df["production"], gridsize=26, cmap="academy_div", mincnt=8,
                          reduce_C_function=np.mean)
     plt.colorbar(hb2, ax=axes[1]), axes[1].set_title("Average production (cells with 8+ players)", fontsize=9)
     for a in axes:
@@ -199,9 +197,9 @@ def spatial_lab(project):
         df, target = d, "rating_adjusted"
     gx, gy, mu, sd, kern, lml = _map(df, name, nu, target)
     fig, axes = plt.subplots(1, 2, figsize=(10, 3.4))
-    cf = axes[0].contourf(gx, gy, mu, 14, cmap="coolwarm", vmin=-6, vmax=6)
+    cf = axes[0].contourf(gx, gy, mu, 14, cmap="academy_div", vmin=-6, vmax=6)
     plt.colorbar(cf, ax=axes[0]), axes[0].set_title("Kriged average vs national mean", fontsize=9)
-    cf2 = axes[1].contourf(gx, gy, sd, 14, cmap="magma")
+    cf2 = axes[1].contourf(gx, gy, sd, 14, cmap="academy_seq")
     plt.colorbar(cf2, ax=axes[1]), axes[1].set_title("Uncertainty of that average (SD)", fontsize=9)
     for a in axes:
         a.grid(False)
@@ -219,7 +217,7 @@ def spatial_lab(project):
 
     st.markdown("#### 4 · Regions: more players, or better players?")
     t = SP.regional_table(df, 5.0)
-    st.dataframe(t.round(3), height=260)
+    ui.table(t, hide_index=False, keep_index_label="Region", height=260)
     st.caption("Big 'players' with an ordinary 'mean_production' = population, not talent. "
                "Always read the standard error: small regions have big ones.")
 
@@ -228,7 +226,7 @@ def spatial_prod(project):
     df, info = _load("hometowns", "p3bprod")
     name, nu = _kernel_pick("p3bprod")
     args = (info["label"], name, nu)
-    if st.button("▶ Run class-by-class map test", type="primary", key="p3b_eval"):
+    if st.button("Run class-by-class map test", type="primary", key="p3b_eval"):
         st.session_state["p3b_eval_args"] = args
     if st.session_state.get("p3b_eval_args") != args:
         st.caption("Metric, baseline and gates are fixed in code before any data is evaluated. Takes ~5–10 seconds.")
@@ -244,5 +242,5 @@ def spatial_prod(project):
     m[0].metric("Baseline MAE (rating + density)", f"{res['mae']['baseline']:.2f}")
     m[1].metric("With Kriging term", f"{res['mae']['model']:.2f}", f"{res['gain']:+.1%} vs baseline")
     m[2].metric("80% interval coverage", f"{res['coverage']:.1%}")
-    st.dataframe(res["per_class"].round(3), hide_index=True)
+    ui.table(res["per_class"])
     st.caption("Even when location passes, compare the size of the gain with what a decision would actually need.")

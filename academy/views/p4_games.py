@@ -38,7 +38,7 @@ def _sufficiency(df):
     weeks = int(df["week"].max())
     miss = 1 - len(df) / (len(per) * weeks) if weeks else 0.0
     ok = med >= Q.MIN_GAMES_PER_SEASON and seasons >= 4
-    st.dataframe(pd.DataFrame({"measure": ["seasons", "player-seasons", "median games per player-season",
+    ui.table(pd.DataFrame({"measure": ["seasons", "player-seasons", "median games per player-season",
                                            "share of scheduled games missing (approx.)"],
                                "value": [str(seasons), str(len(per)), f"{med:.0f}", f"{miss:.0%}"]}), hide_index=True)
     if ok:
@@ -54,7 +54,7 @@ def learning_lab(project):
 
     st.markdown("#### 2 · Hot and cold states (L4.1–L4.2)")
     fits = _hmms(df)
-    st.dataframe(pd.DataFrame([{"states": k, "log-likelihood": round(m["loglik"], 1), "BIC (lower = better)": round(Q.bic(m), 1),
+    ui.table(pd.DataFrame([{"states": k, "log-likelihood": round(m["loglik"], 1), "BIC (lower = better)": round(Q.bic(m), 1),
                                 "state means (vs season-to-date avg)": ", ".join(f"{v:+.1f}" for v in m["means"])}
                                for k, m in fits.items()]), hide_index=True)
     m2 = fits[2]
@@ -86,7 +86,7 @@ def learning_lab(project):
         mae = res["mae"]
         names = {"season_mean": "season-to-date average (baseline)", "last_game": "last game",
                  "ewma": "EWMA (weight chosen on earlier seasons)", "hmm": "HMM (hot/cold)"}
-        st.dataframe(pd.DataFrame({"forecaster": [names[m] for m in mae], "average error": [round(v, 3) for v in mae.values()],
+        ui.table(pd.DataFrame({"forecaster": [names[m] for m in mae], "average error": [round(v, 3) for v in mae.values()],
                                    "80% conformal coverage": [f"{res['coverage'][m]:.1%}" if m in res["coverage"] else "–"
                                                               for m in mae]}), hide_index=True)
         st.caption("All forecasts use only earlier games; settings come from earlier seasons. "
@@ -97,7 +97,7 @@ def learning_lab(project):
         st.info(Q.TORCH_NOTE)
     elif st.button("Train a real LSTM and compare", key="p4_lstm"):
         mae, ntr, cut = _lstm(df)
-        st.dataframe(pd.DataFrame({"forecaster": list(mae), "average error": [round(v, 3) for v in mae.values()]}),
+        ui.table(pd.DataFrame({"forecaster": list(mae), "average error": [round(v, 3) for v in mae.values()]}),
                      hide_index=True)
         st.caption(f"Trained on {ntr} six-game windows before {cut}; tested on {cut} onward. "
                    "With this little data, don't expect it to beat the EWMA.")
@@ -105,7 +105,7 @@ def learning_lab(project):
 
 def production_candidate(project):
     df, info = _load("game_logs", "p4prod")
-    if st.button("▶ Run season-by-season forecast test", type="primary", key="p4_eval"):
+    if st.button("Run season-by-season forecast test", type="primary", key="p4_eval"):
         st.session_state["p4_eval_args"] = info["label"]
     if st.session_state.get("p4_eval_args") != info["label"]:
         st.caption("Metric, baseline and gates are fixed in code before any data is evaluated.")
@@ -123,6 +123,6 @@ def production_candidate(project):
     m[1].metric("EWMA", f"{mae['ewma']:.2f}")
     m[2].metric("HMM", f"{mae['hmm']:.2f}")
     m[3].metric(f"Best ({res['best']}) vs baseline", f"{res['gain']:+.1%}")
-    st.dataframe(res["per_season"].round(3), hide_index=True)
+    ui.table(res["per_season"])
     st.caption("A gain under the bar is reported as it is. The honest conclusion may be "
                "'use the season-to-date average'.")

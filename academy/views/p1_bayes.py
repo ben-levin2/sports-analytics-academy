@@ -84,7 +84,7 @@ def _uncertainty_chart(a0, b0, raw, n_player, labels):
 
 def _shrink_scatter(tab, pop, labels):
     fig, ax = plt.subplots(figsize=(7.5, 3.4))
-    sc = ax.scatter(tab["raw_rate"], tab["post_mean"], c=np.log10(tab["opportunities"]), s=10, cmap="cool", alpha=0.8)
+    sc = ax.scatter(tab["raw_rate"], tab["post_mean"], c=np.log10(tab["opportunities"]), s=10, cmap="academy_seq", alpha=0.8)
     lim = [tab["raw_rate"].quantile(0.005), tab["raw_rate"].quantile(0.995)]
     ax.plot(lim, lim, color=T.MUTED, ls="--", lw=1, label="No shrinkage (y = x)")
     ax.axhline(pop, color=T.TEXT, lw=1, label="Population average")
@@ -104,7 +104,7 @@ def learning_lab(project):
     st.markdown("#### 1 · The prior, fitted from every player (empirical Bayes)")
     rows = [{"group": g if g != "__all__" else "everyone", "prior mean": a / (a + b),
              "prior strength (pretend opportunities)": a + b} for g, (a, b) in priors.items()]
-    st.dataframe(pd.DataFrame(rows).round(4), hide_index=True)
+    ui.table(pd.DataFrame(rows), percent=["prior mean"])
     st.caption("Chosen by maximizing the marginal likelihood across all player-seasons (lesson L1.5). "
                "Strength = how many opportunities of evidence the population average is worth.")
 
@@ -152,15 +152,17 @@ def learning_lab(project):
     cols = (["player_id"] + ([group] if group else []) + ["successes", "opportunities", "raw_rate", "post_mean", "ci_low", "ci_high"])
     l1, l2 = st.columns(2)
     l1.markdown("**Top 10 by raw rate**")
-    l1.dataframe(shown.sort_values("raw_rate", ascending=False).head(10)[cols].round(3), hide_index=True)
+    with l1:
+        ui.table(shown.sort_values("raw_rate", ascending=False).head(10)[cols])
     l2.markdown("**Top 10 by posterior mean**")
-    l2.dataframe(shown.sort_values("post_mean", ascending=False).head(10)[cols].round(3), hide_index=True)
+    with l2:
+        ui.table(shown.sort_values("post_mean", ascending=False).head(10)[cols])
 
 
 def production_candidate(project):
     state = ui.get_state()
     df, info, labels, group = _data_picker("p1prod")
-    if st.button("▶ Run rolling-origin evaluation", type="primary", key="p1_eval"):
+    if st.button("Run rolling-origin evaluation", type="primary", key="p1_eval"):
         st.session_state["p1_eval_args"] = (info["label"], group)
     if st.session_state.get("p1_eval_args") != (info["label"], group):
         st.caption("The metric, baselines and gates are fixed in code before any data is evaluated.")
@@ -174,9 +176,7 @@ def production_candidate(project):
         progress.log_project_run(state, project.id, project.title,
                                  f"{verdict} [{info['label']}{', by position' if group else ''}]")
 
-    (st.success if verdict.startswith("Meets") else st.warning)(f"**Verdict: {verdict}**")
-    ui.html("".join(f'<div class="aa-gate"><span>{"✅" if ok else "❌"}</span><span><b>{ui.esc(name)}</b><br>'
-                    f'<span class="d">{ui.esc(detail)}</span></span></div>' for name, ok, detail in gl))
+    ui.gates(gl, verdict)
     if not res.get("ok"):
         return
 
@@ -193,7 +193,7 @@ def production_candidate(project):
         ax.plot(per["season"], per[col], marker="o", color=c, lw=2, label=lab)
     ax.set_xlabel("Test season (trained only on earlier seasons)"), ax.set_ylabel("Weighted MSE"), ax.legend(fontsize=8)
     ui.show_fig(fig)
-    st.dataframe(per.rename(columns={"test_rows": "player-seasons"}).round(6), hide_index=True)
+    ui.table(per)
     st.caption("Concept 26: each row is one rolling-origin fold. Everything used to predict season T "
                "was computed from seasons before T, and this is checked on every fold.")
 

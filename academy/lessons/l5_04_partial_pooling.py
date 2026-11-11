@@ -30,7 +30,7 @@ def visual():
     target = p["k2"] / p["n2"]
     err = np.average((est - target) ** 2, weights=p["n2"]) * 1e4
     fig, ax = plt.subplots(figsize=(7.5, 3.0))
-    sc = ax.scatter(raw, est, c=np.log10(p["opportunities"]), cmap="cool", s=10)
+    sc = ax.scatter(raw, est, c=np.log10(p["opportunities"]), cmap="academy_seq", s=10)
     ax.plot([0, 0.3], [0, 0.3], color=T.MUTED, ls="--", lw=1)
     ax.axhline(league, color=T.TEXT, lw=0.8)
     ax.set_xlim(0, 0.3), ax.set_ylim(0, 0.3), ax.set_xlabel("This season's raw rate"), ax.set_ylabel("Pooled estimate")

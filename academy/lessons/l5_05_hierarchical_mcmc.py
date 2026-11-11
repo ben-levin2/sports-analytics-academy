@@ -1,9 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import streamlit as st
 
 from .. import data, hierarchical as H, theme as T
 from ..models import Lesson, MathBlock, Question
+from .. import ui
 from ..ui import show_fig
 
 
@@ -22,7 +24,7 @@ def visual():
             ax.plot(chain, lw=0.6, color=c, alpha=0.8)
         ax.set_title(k.replace("_", " "), fontsize=9)
     show_fig(fig)
-    st.dataframe(diag.round(3), hide_index=True)
+    ui.table(diag)
     st.caption("Three chains per parameter (after warm-up). True simulated values: player spread 0.30, team spread 0.15, "
                "season wobble 0.08, experience steps 0.12 / 0.24 / 0.36.")
 

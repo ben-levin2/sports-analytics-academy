@@ -58,8 +58,9 @@ def learning_lab(project):
 
     st.markdown("#### 1 · Standardize (L2.1)")
     scaler, Z = A.standardize(d, features)
-    st.dataframe(pd.DataFrame({"raw mean": d[features].mean(), "raw SD": d[features].std(),
-                               "standardized mean": Z.mean(0), "standardized SD": Z.std(0)}).round(3))
+    ui.table(pd.DataFrame({"Raw mean": d[features].mean().to_numpy(), "Raw SD": d[features].std().to_numpy(),
+                           "Standardized mean": Z.mean(0).round(6) + 0.0, "Standardized SD": Z.std(0)},
+                          index=[f.replace("_", " ").capitalize() for f in features]), hide_index=False, keep_index_label="Stat")
     st.caption("After standardizing, every stat has mean 0 and SD 1, so weight can't swamp pressure rate.")
 
     st.markdown("#### 2 · Choose k (L2.2)")
@@ -96,8 +97,11 @@ def learning_lab(project):
 
     st.markdown("#### 4 · Name the clusters from their profiles")
     prof = A.profiles(d, km.labels_, features)
-    st.dataframe(prof.style.background_gradient(cmap="coolwarm", subset=features, vmin=-1.5, vmax=1.5)
-                 .format("{:.2f}", subset=features))
+    nice = {f: f.replace("_", " ").capitalize() for f in features}
+    prof = prof.rename(columns={**nice, "players": "Players"})
+    prof.index.name = "Cluster"
+    st.dataframe(prof.style.background_gradient(cmap="academy_div", subset=list(nice.values()), vmin=-1.5, vmax=1.5)
+                 .format("{:+.2f}", subset=list(nice.values())))
     st.caption("Each number is how far the cluster sits from the average player, in standard deviations. "
                "Big positive or negative values are what define the cluster.")
     names = {}
@@ -108,7 +112,7 @@ def learning_lab(project):
 
     st.markdown("#### 5 · Discovered archetypes vs listed positions")
     lab = pd.Series(km.labels_).map(lambda c: names.get(c) or f"cluster {c}")
-    st.dataframe(pd.crosstab(lab.rename("archetype"), d["position"].rename("listed position")))
+    ui.table(pd.crosstab(lab.rename("Archetype"), d["position"].rename("Listed position")), hide_index=False)
     st.caption(f"Agreement between clusters and listed positions (ARI): "
                f"{adjusted_rand_score(d['position'], km.labels_):.2f}. Low agreement isn't a failure: "
                "it means the label hides different styles.")
@@ -126,7 +130,7 @@ def production_candidate(project):
                    "Its archetypes stay descriptive (Learning Lab).")
         return
     args = (info["label"], tuple(features), int(k), group, min_snaps)
-    if st.button("▶ Run rolling-origin archetype test", type="primary", key="p2_eval"):
+    if st.button("Run rolling-origin archetype test", type="primary", key="p2_eval"):
         st.session_state["p2_eval_args"] = args
     if st.session_state.get("p2_eval_args") != args:
         st.caption("Metric, baseline and gates are fixed in code before any data is evaluated.")
@@ -142,9 +146,7 @@ def production_candidate(project):
     if not runs or runs[-1]["verdict"] != tag:
         progress.log_project_run(state, project.id, project.title, tag)
 
-    (st.success if verdict.startswith("Meets") else st.warning)(f"**Verdict: {verdict}**")
-    ui.html("".join(f'<div class="aa-gate"><span>{"✅" if ok else "❌"}</span><span><b>{ui.esc(name)}</b><br>'
-                    f'<span class="d">{ui.esc(detail)}</span></span></div>' for name, ok, detail in gl))
+    ui.gates(gl, verdict)
     if not res.get("ok"):
         return
     mae = res["mae"]
@@ -159,5 +161,5 @@ def production_candidate(project):
         ax.plot(per["season"], per[col], marker="o", color=c, lw=2, label=lab)
     ax.set_xlabel("Test season (predicting the following season)"), ax.set_ylabel("MAE"), ax.legend(fontsize=8)
     ui.show_fig(fig)
-    st.dataframe(per.round(3), hide_index=True)
+    ui.table(per)
     st.caption("If archetypes fail here, they can still be useful descriptions. They just haven't earned a place in a forecast.")

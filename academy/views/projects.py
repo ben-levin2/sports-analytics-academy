@@ -41,13 +41,12 @@ def _dataset(p):
 
 def render():
     state = ui.get_state()
-    ui.hero("Research Projects", "Projects",
-            "Each project has a Learning Lab (learn the method) and a Production Candidate track (prove it works).")
-    with st.container(border=True):
+    ui.hero("Research projects", "Projects", "Learn a method in the Learning Lab; prove it works in the Production Candidate track.")
+    with st.expander("How the two tracks differ"):
         c1, c2 = st.columns(2)
-        c1.markdown("**🧪 Learning Lab**  \nExploratory. Teaches a method. Simulated data allowed. "
+        c1.markdown("**Learning Lab**  \nExploratory. Teaches a method. Simulated data allowed. "
                     "Doesn't need to beat anything. Limitations stated.")
-        c2.markdown("**🏭 Production Candidate**  \nReal data, a defined baseline, a predefined metric, time-respecting "
+        c2.markdown("**Production Candidate**  \nReal data, a defined baseline, a predefined metric, time-respecting "
                     "validation, beats the baseline, checked for leakage and calibration. "
                     "Never labelled production-ready just because it runs.")
 
@@ -55,22 +54,21 @@ def render():
     if st.session_state.get("proj_pick") not in by_id:
         st.session_state["proj_pick"] = PROJECTS[0].id
     p = by_id[st.selectbox("Project", list(by_id), key="proj_pick",
-                           format_func=lambda i: f"{by_id[i].label} · Level {by_id[i].level} · {by_id[i].title}"
-                                                 + ("" if by_id[i].status == "built" else "  (starter)"))]
+                           format_func=lambda i: f"{by_id[i].label} · Level {by_id[i].level} · {by_id[i].title}")]
     rec = progress.project_rec(state, p.id) if p.id in state["projects"] else {"steps": [], "notes": ""}
 
-    st.markdown(f"## {p.label} · {p.title}")
-    concept_pills = "".join(ui.pill(f"#{curriculum.CONCEPT_BY_ID[c].num} {curriculum.CONCEPT_BY_ID[c].name}", "gray")
+    st.markdown(f"## {p.title}")
+    concept_pills = "".join(ui.pill(f"Concept {curriculum.CONCEPT_BY_ID[c].num}: {curriculum.CONCEPT_BY_ID[c].name}", "gray")
                             for c in p.concept_ids if c in curriculum.CONCEPT_BY_ID)
-    ui.html(ui.pill(f"LEVEL {p.level}") + ui.pill("FULLY BUILT" if p.status == "built" else "STARTER",
+    ui.html(ui.pill(f"Level {p.level}") + ui.pill("Fully built" if p.status == "built" else "Starter",
                                                   "green" if p.status == "built" else "gray") + concept_pills)
     st.markdown(f"**Objective:** {p.objective}")
-    with st.expander("PSFAL connection", expanded=p.status == "built"):
+    with st.expander("PSFAL connection"):
         st.markdown(p.psfal)
     with st.expander("Dataset requirements"):
         _dataset(p)
 
-    lab_tab, prod_tab = st.tabs(["🧪 Learning Lab", "🏭 Production Candidate"])
+    lab_tab, prod_tab = st.tabs(["Learning Lab", "Production Candidate"])
     with lab_tab:
         ui.html(f'<div class="aa-track lab"><span class="aa-label">Learning Lab</span><br>{ui.esc(p.learning.summary)}</div>')
         _steps(p, "lab", p.learning.steps, rec)
@@ -98,7 +96,7 @@ def render():
             ui.label("Plan")
             _steps(p, "prod", pr.steps, rec)
 
-    ui.section("Q", "Final research questions")
+    ui.section("Wrap-up", "Final research questions")
     st.markdown("\n".join(f"{i}. {q}" for i, q in enumerate(p.questions, start=1)))
     st.markdown("#### Research notes")
     notes = st.text_area("Notes", value=rec.get("notes", ""), key=f"notes_{p.id}", height=130,

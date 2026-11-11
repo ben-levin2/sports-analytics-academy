@@ -4,20 +4,19 @@ from ..projects_data import PROJECTS
 
 LEGEND = (
     '<div class="aa-legend">'
-    '<span style="--c:#34507A;--b:transparent">Not started</span>'
-    '<span style="--c:#7A5A1E;--b:#241D10">Learning (&lt;70%)</span>'
-    '<span style="--c:#2D5C9E;--b:#10233F">Proficient (70%+)</span>'
-    '<span style="--c:#1F6B45;--b:#0E2A21">Mastered (90%+)</span>'
-    '<span style="--c:#263754;--b:transparent;border-style:dashed">Planned (no lesson yet)</span>'
+    '<span style="--c:#22304A;--b:transparent">Not started</span>'
+    '<span style="--c:#6A5124;--b:#2A2214">Learning (&lt;70%)</span>'
+    '<span style="--c:#2D4E80;--b:#14243F">Proficient (70%+)</span>'
+    '<span style="--c:#5B9BF5;--b:#1B3A66">Mastered (90%+)</span>'
     '</div>')
 
 
 def project_tag(state, p) -> str:
     runs = state["projects"].get(p.id, {}).get("runs", [])
-    pc = "PC: not run" if p.status == "built" else "PC: planned"
+    pc = "not run"
     if runs:
-        pc = "PC: candidate" if runs[-1]["verdict"].startswith("Meets") else "PC: lab only"
-    return f"{p.label} {ui.esc(p.title)} · {pc}"
+        pc = "candidate" if runs[-1]["verdict"].startswith("Meets") else "lab only"
+    return f"{p.label} · {pc}"
 
 
 def render_map(state, show_projects: bool = True) -> None:
@@ -26,7 +25,7 @@ def render_map(state, show_projects: bool = True) -> None:
     cols = []
     for lv in curriculum.LEVELS:
         nodes = "".join(
-            f'<div class="aa-node {statuses[c.id]}" title="{ui.esc(c.summary)}"><b>{c.num}</b>{ui.esc(c.name)}</div>'
+            f'<div class="aa-node {statuses[c.id]}" title="{c.num}. {ui.esc(c.name)}: {ui.esc(c.summary)}"><b>{c.num}</b><span>{ui.esc(c.name)}</span></div>'
             for c in sorted(curriculum.concepts_in_level(lv.number), key=lambda c: c.num))
         projs = ""
         if show_projects:

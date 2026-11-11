@@ -42,10 +42,12 @@ def lineup_lab(project):
     cols = ["player_id", "position", "cap_hit_m", "projected_value", "value_sd"]
     a, b = st.columns(2)
     a.markdown(f"**Exact solver** · score {L.total(pool, x_opt, risk):.2f} · cap ${pool['cap_hit_m'][x_opt].sum():.1f}M")
-    a.dataframe(pool.loc[x_opt, cols].round(2), hide_index=True)
+    with a:
+        ui.table(pool.loc[x_opt, cols])
     if x_gr is not None:
         b.markdown(f"**Greedy** · score {L.total(pool, x_gr, risk):.2f} · cap ${pool['cap_hit_m'][x_gr].sum():.1f}M")
-        b.dataframe(pool.loc[x_gr, cols].round(2), hide_index=True)
+        with b:
+            ui.table(pool.loc[x_gr, cols])
 
     st.markdown("#### 3 · Race: Bayesian optimization vs random search (same 40-try budget)")
     if st.button("Run the race", key="p6a_race"):
@@ -85,7 +87,7 @@ def lineup_lab(project):
 def lineup_prod(project):
     df, info = _load("lineup_candidates", "p6aprod")
     risk = st.slider("Risk penalty λ (fix it before running)", 0.0, 2.0, 0.0, 0.25, key="p6a_prod_risk")
-    if st.button("▶ Run the season-by-season back-test", type="primary", key="p6a_eval"):
+    if st.button("Run the season-by-season back-test", type="primary", key="p6a_eval"):
         st.session_state["p6a_eval_args"] = (info["label"], risk)
     if st.session_state.get("p6a_eval_args") != (info["label"], risk):
         st.caption("Metric, baseline and gates are fixed in code before any data is evaluated.")
@@ -105,7 +107,7 @@ def lineup_prod(project):
                 ls="-" if col != "optimizer_projected" else "--", label=lab)
     ax.set_xlabel("Season"), ax.set_ylabel("Total value of the 6"), ax.legend(fontsize=7)
     ui.show_fig(fig)
-    st.dataframe(per.round(2), hide_index=True)
+    ui.table(per)
     st.caption("The dashed green line is what the optimizer expected; the gap down to the blue line is the optimizer's curse.")
 
 
@@ -118,7 +120,7 @@ def _scoreboard(_token):
 def _show_scoreboard(tb):
     show = tb.drop(columns="_gates").copy()
     show["gain vs baseline"] = show["gain vs baseline"].map(lambda g: "n/a" if pd.isna(g) else f"{g:+.1%}")
-    st.dataframe(show, hide_index=True)
+    ui.table(show.rename(columns=lambda c: c[:1].upper() + c[1:]))
     wins = tb[tb["beats baseline?"] == "YES"]
     st.markdown(f"**{len(wins)} of {len(tb)} methods beat their simple baseline.**")
     for line in SB.plain_summary(tb):
@@ -126,14 +128,13 @@ def _show_scoreboard(tb):
     with st.expander("Every gate, study by study"):
         for _, r in tb.iterrows():
             st.markdown(f"**{r['project']}**")
-            ui.html("".join(f'<div class="aa-gate"><span>{"✅" if ok else "❌"}</span><span><b>{ui.esc(n)}</b><br>'
-                            f'<span class="d">{ui.esc(d)}</span></span></div>' for n, ok, d in r["_gates"]))
+            ui.gates(r["_gates"])
 
 
 def integrated_lab(project):
     st.markdown("#### 1 · The scoreboard: which methods earn their complexity?")
     st.caption("Runs each level's automated test on your uploaded data where present, simulated data otherwise.")
-    if st.button("▶ Run the scoreboard", type="primary", key="p6b_run"):
+    if st.button("Run the scoreboard", type="primary", key="p6b_run"):
         st.session_state["p6b_token"] = st.session_state.get("p6b_token", 0) + 1
     if "p6b_token" in st.session_state:
         _show_scoreboard(_scoreboard(st.session_state["p6b_token"]))
@@ -175,7 +176,7 @@ def integrated_prod(project):
         st.success(f"Registered {ui.fmt_ts(reg['ts'])}: {reg['question']}")
 
     st.markdown("#### 2 · Run the primary study")
-    if st.button("▶ Run the registered study", type="primary", key="p6b_eval", disabled=not reg):
+    if st.button("Run the registered study", type="primary", key="p6b_eval", disabled=not reg):
         st.session_state["p6b_eval"] = reg["primary"]
     if not reg or st.session_state.get("p6b_eval") != reg["primary"]:
         st.caption("Save a registration first. The verdict uses the primary study's own gates.")

@@ -1,9 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import streamlit as st
 
 from .. import data, sequence as Q, theme as T
 from ..models import Lesson, MathBlock, Question
+from .. import ui
 from ..ui import show_fig
 
 
@@ -19,7 +21,7 @@ def visual():
     fits = _fits()
     rows = [{"states": k, "log-likelihood": round(m["loglik"], 1), "BIC (lower = better)": round(Q.bic(m), 1)}
             for k, m in fits.items()]
-    st.dataframe(rows, hide_index=True)
+    ui.table(pd.DataFrame(rows))
     m = fits[2]
     xs = np.linspace(-30, 30, 300)
     fig, ax = plt.subplots(figsize=(7, 2.8))

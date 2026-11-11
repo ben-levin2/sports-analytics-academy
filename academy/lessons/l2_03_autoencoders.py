@@ -1,10 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import streamlit as st
 from matplotlib.patches import FancyBboxPatch
 
 from .. import theme as T
 from ..models import Lesson, MathBlock, Question
+from .. import ui
 from ..ui import show_fig
 from ._l2 import group_profiles
 
@@ -41,8 +43,8 @@ def visual():
         st.session_state["l23_errs"] = _errors()
     errs = st.session_state.get("l23_errs")
     if errs:
-        st.dataframe({"code size": list(errs), "autoencoder error": [round(v[0], 3) for v in errs.values()],
-                      "PCA error": [round(v[1], 3) for v in errs.values()]}, hide_index=True)
+        ui.table(pd.DataFrame({"code size": list(errs), "autoencoder error": [round(v[0], 3) for v in errs.values()],
+                      "PCA error": [round(v[1], 3) for v in errs.values()]}))
         st.caption("Error = average squared gap between the original standardized stats and the rebuilt ones. Lower is better.")
 
 

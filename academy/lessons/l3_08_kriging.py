@@ -22,13 +22,13 @@ def visual():
                     horizontal=True, key="l38_view")
     fig, ax = plt.subplots(figsize=(8, 3.8))
     if view.startswith("Where"):
-        hb = ax.hexbin(df["lon"], df["lat"], gridsize=28, cmap="viridis", mincnt=1)
+        hb = ax.hexbin(df["lon"], df["lat"], gridsize=28, cmap="academy_seq", mincnt=1)
         plt.colorbar(hb, ax=ax, label="players")
     elif view.startswith("Kriged"):
-        cf = ax.contourf(gx, gy, mu, 14, cmap="coolwarm", vmin=-6, vmax=6)
+        cf = ax.contourf(gx, gy, mu, 14, cmap="academy_div", vmin=-6, vmax=6)
         plt.colorbar(cf, ax=ax, label="production vs average")
     else:
-        cf = ax.contourf(gx, gy, sd, 14, cmap="magma")
+        cf = ax.contourf(gx, gy, sd, 14, cmap="academy_seq")
         plt.colorbar(cf, ax=ax, label="SD of the regional average")
     ax.set_xlabel("Longitude"), ax.set_ylabel("Latitude"), ax.grid(False)
     show_fig(fig)

@@ -4,6 +4,11 @@ from .. import config, curriculum, progress, quiz, ui
 from ..lessons import all_lessons, get_lesson
 
 
+STEPS = [("step-1", "1 Plain English"), ("step-2", "2 The problem"), ("step-3", "3 Football example"),
+         ("step-4", "4 Visual"), ("step-5", "5–6 Math"), ("step-7", "7 Code"), ("step-8", "8 Line by line"),
+         ("step-9", "9 PSFAL"), ("step-10", "10 Quiz")]
+
+
 def _problem(l):
     with st.container(border=True):
         ui.label("The problem")
@@ -33,13 +38,15 @@ def _quiz(l, state):
     rkey = f"quiz_result_{l.id}"
     st.caption(f"{len(l.quiz)} questions. Lesson passes at {config.COMPLETE_THRESHOLD:.0%} and is mastered at "
                f"{config.MASTERY_THRESHOLD:.0%} (best attempt). Concept mastery uses your latest attempt.")
-    with st.form(f"quiz_{l.id}"):
+    with st.form(f"quiz_{l.id}", border=True):
         responses = {}
         for i, q in enumerate(l.quiz, start=1):
+            if i > 1:
+                st.divider()
             kind = {"mc": "Multiple choice", "short": "Short answer", "numeric": "Calculate"}[q.kind]
             c = curriculum.CONCEPT_BY_ID.get(l.question_concept(q))
-            ui.html(ui.pill(f"Q{i}") + ui.pill(kind, "gray") + ui.pill(q.category, "gray")
-                    + (ui.pill(f"#{c.num} {c.name}", "gray") if c else ""))
+            ui.html(f'<div class="aa-label" style="margin-top:0">Question {i} · {ui.esc(kind)} · {ui.esc(q.category)}'
+                    + (f' · concept {c.num}' if c else "") + "</div>")
             st.markdown(f"**{q.prompt}**")
             k = f"{l.id}_{q.id}"
             if q.kind == "mc":
@@ -72,8 +79,8 @@ def _quiz(l, state):
             ui.html(f"Concept #{c.num} {ui.esc(c.name)}: " + ui.concept_pill(curriculum.concept_status(state, cid)))
         for i, q in enumerate(l.quiz, start=1):
             frac = res["per_q"].get(q.id, 0)
-            icon = "✅" if frac == 1 else ("🟡" if frac > 0 else "❌")
-            with st.expander(f"{icon} Q{i}: {q.prompt[:90]}{'…' if len(q.prompt) > 90 else ''}", expanded=frac < 1):
+            tag = "Correct" if frac == 1 else ("Partly right" if frac > 0 else "Not yet")
+            with st.expander(f"Q{i} · {tag} — {q.prompt[:80]}{'…' if len(q.prompt) > 80 else ''}", expanded=frac < 1):
                 st.markdown(res["feedback"][q.id])
 
 
@@ -95,23 +102,24 @@ def render():
     progress.mark_opened(state, l.id, l.title)
     lv = curriculum.level(l.level)
 
-    ui.hero(f"{l.code_label} · Level {lv.number}: {lv.title}", l.title, l.subtitle)
+    ui.hero(f"Lesson {l.code_label} · Level {lv.number}: {lv.title}", l.title, l.subtitle)
     concepts = [curriculum.CONCEPT_BY_ID[c] for c in l.concept_ids]
-    ui.html(ui.status_pill(progress.lesson_status(state, l.id)) + ui.pill(f"{l.minutes} MIN", "gray")
-            + "".join(ui.pill(f"#{c.num} {c.name}", "gray") for c in concepts))
+    ui.html(ui.status_pill(progress.lesson_status(state, l.id)) + ui.pill(f"{l.minutes} min", "gray")
+            + "".join(ui.pill(f"Concept {c.num}: {c.name}", "gray") for c in concepts))
+    ui.step_nav(STEPS)
 
-    ui.section("01", "In plain English")
+    ui.section("Step 1", "In plain English", "step-1")
     st.markdown(l.simple)
 
-    ui.section("02", "What problem it solves")
+    ui.section("Step 2", "What problem it solves", "step-2")
     _problem(l)
 
-    ui.section("03", "College football example")
+    ui.section("Step 3", "College football example", "step-3")
     ui.sim_banner("The players and numbers in this example are fictional, chosen to be realistic.")
     st.markdown(l.sports)
-    ui.html(f'<div class="aa-takeaway"><span class="aa-label">Key idea</span><br>{ui.esc(l.takeaway)}</div>')
+    ui.html(f'<div class="aa-takeaway"><div class="aa-label">Key idea</div>{ui.esc(l.takeaway)}</div>')
 
-    ui.section("04", "See it")
+    ui.section("Step 4", "See it", "step-4")
     if l.visual:
         try:
             l.visual()
@@ -119,7 +127,7 @@ def render():
             st.error(f"This visual failed to render: {exc!r}")
     st.caption(l.visual_caption)
 
-    ui.section("05–06", "The math, one step at a time, with every symbol explained")
+    ui.section("Steps 5–6", "The math, step by step, every symbol explained", "step-5")
     for m in l.math:
         with st.container(border=True):
             ui.label(m.title)
@@ -128,17 +136,17 @@ def render():
             if m.note:
                 st.caption(m.note)
 
-    ui.section("07", "Python example")
+    ui.section("Step 7", "Python example", "step-7")
     st.markdown(l.code_notes)
     ui.code_runner(l.code, key=f"code_{l.id}")
 
-    ui.section("08", "The code, line by line")
+    ui.section("Step 8", "The code, line by line", "step-8")
     _walkthrough(l)
 
-    ui.section("09", "How this applies to PSFAL")
+    ui.section("Step 9", "How this applies to PSFAL", "step-9")
     st.markdown(l.psfal)
 
-    ui.section("10", "Knowledge check")
+    ui.section("Step 10", "Knowledge check", "step-10")
     _quiz(l, state)
 
     st.divider()

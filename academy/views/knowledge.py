@@ -19,7 +19,7 @@ def render():
                      "Status": curriculum.concept_status(state, c.id).title(),
                      "Latest score": f"{score:.0%}" if score is not None else "–", "Questions": n,
                      "Taught in": ", ".join(l.code_label for l in curriculum.lessons_for_concept(c.id)) or "planned"})
-    st.dataframe(pd.DataFrame(crow), hide_index=True)
+    ui.table(pd.DataFrame(crow))
 
     st.markdown("### Lessons (best attempt)")
     rows = []
@@ -33,7 +33,7 @@ def render():
             "Last": f"{attempts[-1]['score']:.0%}" if attempts else "–",
             "Last taken": ui.fmt_ts(attempts[-1]["ts"]) if attempts else "–",
         })
-    st.dataframe(pd.DataFrame(rows), hide_index=True)
+    ui.table(pd.DataFrame(rows))
 
     st.markdown("### Review list")
     st.caption("Questions you didn't fully get right on your most recent attempt.")
@@ -49,7 +49,7 @@ def render():
         with st.container(border=True):
             st.markdown(f"**{l.code_label} · {l.title}**")
             for q in missed:
-                st.markdown(f"- {q.prompt}  \n  <span style='color:#8FA3BF;font-size:.85rem'>{q.category} · {q.kind}</span>",
+                st.markdown(f"- {q.prompt}  \n  <span style='color:#93A3BA;font-size:.85rem'>{q.category} · {q.kind}</span>",
                             unsafe_allow_html=True)
             st.button("Retake quiz", key=f"kc_{l.id}", on_click=ui.go, args=("Lessons", l.id))
     if not any_missed:

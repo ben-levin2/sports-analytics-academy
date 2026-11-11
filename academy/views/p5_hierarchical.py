@@ -52,6 +52,10 @@ def _evaluate(df):
     return H.evaluate(df)
 
 
+def _nice(name):
+    return (str(name).replace("C(position)[", "Position ").replace("C(exp)[T.", "Experience ").replace("]", ""))
+
+
 def _pick(key):
     """Like the shared loader, but defaults to the dataset WITH team and experience effects."""
     from .. import datasets
@@ -73,7 +77,7 @@ def learning_lab(project):
     worst = float(diag["R-hat"].max())
     (st.success if worst <= H.MAX_RHAT else st.error)(
         f"Worst R-hat {worst:.3f} ({'converged' if worst <= H.MAX_RHAT else 'NOT converged: do not trust the numbers below'}).")
-    st.dataframe(diag.round(3), hide_index=True)
+    ui.table(diag)
 
     st.markdown("#### 2 · What the model learned (L5.5)")
     beta = diag.set_index("parameter")["mean"]
@@ -83,9 +87,12 @@ def learning_lab(project):
                          index=[p.replace("position ", "") for p in pos_rows])
     c1, c2 = st.columns(2)
     c1.markdown("**Average player's rate by position and experience**")
-    c1.dataframe(rates.round(3))
+    with c1:
+        ui.table(rates.rename(columns={"rookie": "Rookie", "3rd+ season": "3rd+ season"}), percent=["Rookie", "3rd+ season"],
+                 hide_index=False, keep_index_label="Position")
     c2.markdown("**Where the variation comes from (log-odds spreads)**")
-    c2.dataframe(diag[diag["parameter"].str.startswith("sd")][["parameter", "mean"]].round(3), hide_index=True)
+    with c2:
+        ui.table(diag[diag["parameter"].str.startswith("sd")][["parameter", "mean"]])
 
     st.markdown("#### 3 · Partial pooling at work (L5.4)")
     snaps = d.groupby("player_id")["opportunities"].sum().reindex(u.index)
@@ -98,7 +105,7 @@ def learning_lab(project):
 
     st.markdown("#### 4 · Same structure, fitted as a mixed model (L5.6)")
     params, sd_p, sd_r, n = _mixed(df)
-    st.dataframe(pd.DataFrame({"mixed model (statsmodels)": params.round(3)}))
+    ui.table(pd.DataFrame({"Parameter": [_nice(i) for i in params.index], "Mixed model (statsmodels)": params.to_numpy()}))
     st.caption(f"Player spread {sd_p:.3f}, residual {sd_r:.3f}, on {n} player-seasons with 100+ snaps. "
                "Compare the experience steps with the MCMC table above. The mixed model has no team effect "
                "or per-row luck weights, so expect small differences.")
@@ -114,7 +121,7 @@ def learning_lab(project):
 
 def production_candidate(project):
     df, info = _pick("p5prod")
-    if st.button("▶ Run the three-way contest", type="primary", key="p5_eval"):
+    if st.button("Run the three-way contest", type="primary", key="p5_eval"):
         st.session_state["p5_eval_args"] = info["label"]
     if st.session_state.get("p5_eval_args") != info["label"]:
         st.caption("Metric, baselines and gates are fixed in code before any data is evaluated.")
@@ -138,6 +145,6 @@ def production_candidate(project):
         ax.plot(per["season"], per[col] * 1e4, marker="o", color=c, lw=2, label=lab)
     ax.set_xlabel("Test season"), ax.set_ylabel("Weighted MSE ×10⁻⁴"), ax.legend(fontsize=8)
     ui.show_fig(fig)
-    st.dataframe(per.round(6), hide_index=True)
+    ui.table(per)
     st.caption("Try both simulated datasets. With team and experience effects, the hierarchy should help. "
                "Without them, it shouldn't, and the gates will say so.")

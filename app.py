@@ -1,7 +1,7 @@
 """Sports Analytics Academy: entry point.  Run:  streamlit run app.py"""
 import streamlit as st
 
-st.set_page_config(page_title="Sports Analytics Academy", page_icon="📈", layout="wide",
+st.set_page_config(page_title="Sports Analytics Academy", page_icon=":material/sports_football:", layout="wide",
                    initial_sidebar_state="expanded")
 
 from academy import config, curriculum, progress, theme, ui  # noqa: E402
@@ -24,16 +24,16 @@ st.session_state.setdefault("nav", "Dashboard")
 state = ui.get_state()
 
 with st.sidebar:
-    ui.html('<div class="aa-label">Personal research academy</div>'
-            '<div class="aa-brand">Sports Analytics <span>Academy</span></div>')
+    ui.html('<div class="aa-brand">Sports Analytics <span>Academy</span></div>'
+            '<div style="font-size:.78rem;color:#93A3BA;margin-top:2px">Personal research academy</div>')
     st.write("")
     st.radio("Navigate", list(PAGES), key="nav", label_visibility="collapsed")
     st.divider()
     s = curriculum.summary(state)
-    ui.html(f'<div class="aa-label">Level {s["level"].number} · {ui.esc(s["level"].title)}</div>'
+    ui.html(f'<div style="font-size:.8rem;color:#E7ECF4;font-weight:500">Level {s["level"].number} · {ui.esc(s["level"].title)}</div>'
             + ui.bar(len(s["concepts_mastered"]) / len(curriculum.CONCEPTS))
-            + f'<div style="font-size:.8rem;color:#8FA3BF">{len(s["concepts_mastered"])}/{len(curriculum.CONCEPTS)} concepts mastered · '
-              f'{len(s["completed"])}/{s["total"]} lessons · {s["streak"]}-day streak</div>')
+            + f'<div style="font-size:.76rem;color:#93A3BA">{len(s["concepts_mastered"])} of {len(curriculum.CONCEPTS)} concepts mastered<br>'
+              f'{len(s["completed"])} of {s["total"]} lessons · {s["streak"]}-day streak</div>')
     pending = int(state["meta"].get("changes_since_export") or 0)
     if pending >= config.BACKUP_NUDGE_AFTER:
         st.warning(f"{pending} changes since your last backup.")

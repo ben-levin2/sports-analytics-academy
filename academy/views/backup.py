@@ -18,7 +18,7 @@ def render():
     c3.metric("Changes since backup", m.get("changes_since_export", 0))
 
     st.markdown("### Export a backup")
-    st.download_button("⬇ Download progress (JSON)", data=progress.to_json(state),
+    st.download_button("Download progress (JSON)", data=progress.to_json(state),
                        file_name=f"academy-progress-{progress.today().isoformat()}.json",
                        mime="application/json", type="primary", on_click=_exported)
 
