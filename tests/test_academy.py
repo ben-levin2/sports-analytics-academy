@@ -22,8 +22,8 @@ from academy.runner import run_code  # noqa: E402
 # ---------------------------------------------------------------- curriculum integrity
 def test_28_concepts_six_levels():
     nums = sorted(c.num for c in curriculum.CONCEPTS)
-    assert nums == list(range(1, 34))                     # the original 28 plus small-data concepts 29-33
-    assert len(curriculum.CONCEPT_BY_ID) == 33
+    assert nums == list(range(1, 37))                     # original 28, small-data 29-33, honest evaluation 34-36
+    assert len(curriculum.CONCEPT_BY_ID) == 36
     assert [c.num for c in curriculum.CONCEPTS[:28]] == list(range(1, 29))   # originals unchanged, in order
     assert {c.level for c in curriculum.CONCEPTS} == {1, 2, 3, 4, 5, 6}
     assert len(curriculum.LEVELS) == 6
@@ -490,3 +490,78 @@ def test_draft_upload_validation():
     loaded, info = datasets.load("draft_outcomes")
     assert info["source"] == "upload" and info["real"] and len(loaded) == len(df)
     datasets.remove_upload("draft_outcomes")
+
+
+# ---------------------------------------------------------------- honest evaluation (concepts 34-36)
+ORIGINAL_33 = ["bayesian-inference", "prior-distributions", "posterior-distributions", "likelihood",
+               "marginal-likelihood", "stochastic-processes", "latent-spaces", "k-means", "autoencoders", "vaes",
+               "survival-analysis", "cox-ph", "gp-regression", "kernel-functions", "rbf-kernels", "matern-kernels",
+               "kriging", "hmms", "lstms", "seq2seq", "em", "mcmc", "hierarchical-bayes", "bayesian-optimization",
+               "calibration-brier", "time-based-cv", "mixed-effects", "conformal-prediction", "regularization",
+               "bayesian-logistic", "monotonic-gam", "transfer-learning", "discrete-time-survival"]
+
+
+def test_original_33_concepts_unchanged_and_in_order():
+    first = curriculum.CONCEPTS[:33]
+    assert [c.id for c in first] == ORIGINAL_33
+    assert [c.num for c in first] == list(range(1, 34))
+    assert [c.num for c in curriculum.CONCEPTS[33:]] == [34, 35, 36]
+
+
+def test_honest_evaluation_lessons():
+    by_id = {l.id: l for l in all_lessons()}
+    want = {"l3-11-strong-baselines": ("strong-baselines", 3), "l3-12-forward-tests": ("forward-tests", 3),
+            "l6-03-preregistered-bar": ("preregistered-bar", 6)}
+    for lid, (cid, level) in want.items():
+        l = by_id[lid]
+        assert l.level == level and l.concept_ids == [cid]
+        assert len(l.quiz) == 5 and all(l.question_concept(q) == cid for q in l.quiz)
+        assert "PSFAL" not in l.sports and "Model 8" not in l.sports + l.psfal and "Model 9" not in l.sports + l.psfal
+    assert len(all_lessons()) == 40
+
+
+def test_forward_freeze_verify_and_window_trap():
+    from academy import forward as F
+    preds = F.simulate_forecast()
+    fz = F.freeze(preds, F.make_plan(2022))
+    assert F.verify(fz) and len(fz["hash"]) == 64
+    assert F.freeze(preds, F.make_plan(2022))["hash"] == fz["hash"]                 # deterministic
+    edited = dict(fz, payload=fz["payload"].replace('",0.', '",0.9', 1))
+    assert not F.verify(edited)
+    assert not F.score(edited, F.simulate_outcomes(observed_through=2027), 2027)["ok"]
+    early = F.score(fz, F.simulate_outcomes(observed_through=2026), 2026)
+    assert early["ok"] and not early["complete"] and early["metrics"] == ["auc"] and "ece" not in early
+    assert early["observed_rate"] < early["mean_forecast"]                          # the mismatch trap
+    final = F.score(fz, F.simulate_outcomes(observed_through=2027), 2027)
+    assert final["complete"] and "ece" in final and final["auc"] > 0.7
+
+
+def test_p3c_forward_tab_helpers():
+    from academy.views import p3c_draft
+    fz = p3c_draft.freeze_forecast(60, 7)
+    res = p3c_draft.score_forecast(fz, 2027)
+    assert res["ok"] and res["complete"] and res["n"] == 60
+    assert not p3c_draft.score_forecast(dict(fz, hash="0" * 64), 2027)["ok"]
+
+
+def test_p3c_production_baseline_is_the_stronger_one():
+    from academy import smalldata as SD
+    res = SD.evaluate(data.make_draft_classes(), boot=100)
+    s = res["summary"]
+    assert res["baseline"] == ("rating_only" if s.loc["rating_only", "auc"] > s.loc["plain", "auc"] else "plain")
+    assert abs(s.loc["bayes", "gain"] - (s.loc["bayes", "auc"] - s.loc[res["baseline"], "auc"])) < 1e-12
+    lab = SD.evaluate(data.make_draft_classes(), boot=0, baseline="plain")
+    assert lab["baseline"] == "plain"
+
+
+def test_p3c_forward_tab_renders():
+    from streamlit.testing.v1 import AppTest
+    at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=240).run()
+    at.sidebar.radio(key="nav").set_value("Projects").run()
+    at.selectbox(key="proj_pick").set_value("p3c-small-data-draft").run()
+    at.button(key="p3c_fwd_freeze").click().run()
+    assert not at.exception
+    assert any("SHA-256" in c.value for c in at.code)
+    at.button(key="p3c_fwd_go").click().run()
+    assert not at.exception
+    assert any(m.label == "AUC (scored)" for m in at.metric)

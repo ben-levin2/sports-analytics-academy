@@ -1,7 +1,10 @@
 """Concepts 29-33 and the Small-Data Draft Model project (P3C).
 
 Four models predict P(drafted within 5 years) for a recruiting class, judged at the end of its first season:
-  plain     plain logistic regression (the baseline; almost no penalty)
+  plain     plain logistic regression (almost no penalty)
+  rating_only  logistic on rating alone (a simple reference)
+The Learning Lab judges gains against the plain logistic. The Production Candidate test judges them against the
+STRONGER of plain logistic and rating-only (higher pooled test AUC), so a weak baseline can't create a fake win.
   bayes     Bayesian logistic regression with informative Normal priors (concepts 29-30)
   gam       monotonic generalized additive model: smooth curves that can only rise (concept 31)
   survival  discrete-time survival on person-period rows, so unfinished classes still count (concept 33)
@@ -23,7 +26,7 @@ WINDOW = PERIODS[-1]
 LAG = 1                             # predictions are made one year after enrolling (year-1 stats known)
 MODELS = ("plain", "bayes", "gam", "survival")
 CHALLENGERS = MODELS[1:]
-NAMES = {"plain": "Plain logistic (baseline)", "bayes": "Bayesian logistic", "gam": "Monotonic GAM",
+NAMES = {"plain": "Plain logistic", "bayes": "Bayesian logistic", "gam": "Monotonic GAM",
          "survival": "Discrete-time survival", "rating_only": "Rating only (reference)"}
 
 MIN_AUC_GAIN = 0.02
@@ -36,7 +39,7 @@ MIN_TRAIN_ROWS = 60
 MIN_TRAIN_DRAFTED = 5
 PRIMARY_METRIC = ("Pooled AUC of P(drafted within 5 years) over every later class whose draft window has closed, "
                   "each class predicted one year after it enrolled from earlier classes only. A challenger must "
-                  f"beat the plain logistic baseline by at least +{MIN_AUC_GAIN:.2f} AUC, with the class-level "
+                  f"beat the stronger of the plain logistic and rating-only baselines by at least +{MIN_AUC_GAIN:.2f} AUC, with the class-level "
                   f"(cluster) bootstrap lower bound above 0 at the {BOOT_ALPHA:.2%} level, and calibration error "
                   f"<= {MAX_ECE}.")
 
@@ -237,11 +240,13 @@ def _has_draft_years(df):
     return "draft_year" in df.columns and df["draft_year"].notna().any()
 
 
-def evaluate(df: pd.DataFrame, boot: int = BOOT_B, seed: int = 0) -> dict:
+def evaluate(df: pd.DataFrame, boot: int = BOOT_B, seed: int = 0, baseline: str = "best") -> dict:
     """Class-by-class, time-respecting test. For each class C whose 5-year window has closed, predict at
     as_of = C + 1 using only what was known then:
       - logistic-type models: classes c <= C + 1 - 5 (window closed by as_of)
-      - survival: every earlier class, with draft years only up to as_of (unfinished classes included)."""
+      - survival: every earlier class, with draft years only up to as_of (unfinished classes included).
+    baseline: "best" = the stronger (higher pooled AUC) of plain logistic and rating-only (Production Candidate);
+              "plain" = plain logistic (Learning Lab)."""
     df = df.copy()
     has_dy = _has_draft_years(df)
     data_end = int(df["draft_year"].max()) if has_dy else int(df["class_year"].max()) + WINDOW
@@ -271,9 +276,12 @@ def evaluate(df: pd.DataFrame, boot: int = BOOT_B, seed: int = 0) -> dict:
     models = [m for m in ("plain", "bayes", "gam", "survival", "rating_only") if m in r.columns]
     summ = pd.DataFrame({m: {"auc": V.auc(r[m], r["y"]), "brier": V.brier(r[m], r["y"]),
                              "ece": V.ece(r[m], r["y"])} for m in models}).T
-    summ["gain"] = summ["auc"] - summ.loc["plain", "auc"]
-    boot_res = cluster_bootstrap(r, [m for m in CHALLENGERS if m in r.columns], B=boot, seed=seed) if boot else {}
-    return {"ok": True, "rows": r, "summary": summ, "boot": boot_res, "leak_ok": leak_ok, "has_draft_years": has_dy,
+    base = "plain"
+    if baseline == "best" and summ.loc["rating_only", "auc"] > summ.loc["plain", "auc"]:
+        base = "rating_only"
+    summ["gain"] = summ["auc"] - summ.loc[base, "auc"]
+    boot_res = cluster_bootstrap(r, [m for m in CHALLENGERS if m in r.columns], B=boot, seed=seed, base=base) if boot else {}
+    return {"ok": True, "rows": r, "summary": summ, "boot": boot_res, "baseline": base, "leak_ok": leak_ok, "has_draft_years": has_dy,
             "n_classes": int(r["class_year"].nunique()), "n_drafted": int(r["y"].sum()), "n_test": len(r),
             "train_rows_full": n_full, "train_players_survival": n_pp, "data_end": data_end}
 
@@ -289,19 +297,19 @@ def fast_auc(score, y):
     return (ranks[y == 1].sum() - n1 * (n1 + 1) / 2) / (n1 * n0)
 
 
-def cluster_bootstrap(r: pd.DataFrame, models, B=BOOT_B, seed=0) -> dict:
+def cluster_bootstrap(r: pd.DataFrame, models, B=BOOT_B, seed=0, base="plain") -> dict:
     """Resample whole CLASSES with replacement (players in one class share a year, a staff, a draft),
     recompute the pooled AUC gain over the baseline each time."""
     rng = np.random.default_rng(seed)
     groups = [g.index.to_numpy() for _, g in r.groupby("class_year")]
     y = r["y"].to_numpy()
-    cols = {m: r[m].to_numpy() for m in ["plain", *models]}
+    cols = {m: r[m].to_numpy() for m in [base, *models]}
     draws = {m: [] for m in models}
     for _ in range(B):
         idx = np.concatenate([groups[i] for i in rng.integers(0, len(groups), len(groups))])
-        base = fast_auc(cols["plain"][idx], y[idx])
+        b_auc = fast_auc(cols[base][idx], y[idx])
         for m in models:
-            draws[m].append(fast_auc(cols[m][idx], y[idx]) - base)
+            draws[m].append(fast_auc(cols[m][idx], y[idx]) - b_auc)
     out = {}
     for m, d in draws.items():
         d = np.array(d)
@@ -319,7 +327,9 @@ def gates(res: dict, data_info: dict, model: str) -> list:
     g = [("Real data you have rights to use", bool(is_real),
           "Simulated data can never qualify." if data_info["source"] == "simulated"
           else ("Marked as real on upload." if is_real else "Upload is not marked as real data.")),
-         ("Baseline defined", True, "Plain logistic regression on rating, year-1 percentile and position."),
+         ("Baseline defined", True,
+          f"Stronger of plain logistic and rating-only; used here: {NAMES[res.get('baseline', 'plain')]} "
+          f"(AUC {res['summary'].loc[res.get('baseline', 'plain'), 'auc']:.3f})."),
          ("Metric predefined", True, PRIMARY_METRIC),
          ("Time-based validation (concept 26)",
           res["n_classes"] >= MIN_TEST_CLASSES and res["n_drafted"] >= MIN_TEST_DRAFTED,
@@ -334,7 +344,8 @@ def gates(res: dict, data_info: dict, model: str) -> list:
     s = res["summary"].loc[model]
     b = res["boot"].get(model)
     g += [("AUC gain over the baseline", s["gain"] >= MIN_AUC_GAIN,
-           f"{s['auc']:.3f} vs {res['summary'].loc['plain', 'auc']:.3f} = {s['gain']:+.3f} (need >= +{MIN_AUC_GAIN:.2f})."),
+           f"{s['auc']:.3f} vs {res['summary'].loc[res.get('baseline', 'plain'), 'auc']:.3f} = {s['gain']:+.3f} "
+           f"(need >= +{MIN_AUC_GAIN:.2f})."),
           ("Gain holds up in the cluster bootstrap", bool(b) and b["lower"] > 0,
            (f"Resampling whole classes: lower bound {b['lower']:+.3f} at the {BOOT_ALPHA:.2%} level "
             f"(90% range {b['lo90']:+.3f} to {b['hi90']:+.3f}); need above 0.") if b else "Bootstrap not run."),
@@ -358,7 +369,7 @@ def failure_study(sizes=(10, 22, 45, 90), noises=(0.0, 0.5, 1.0), seeds=(1, 2, 3
             for s in seeds:
                 df = make_draft_classes(per_class=v if kind.startswith("Recruits") else 22,
                                         noise=v if kind.startswith("Input") else 0.0, seed=100 + s)
-                res = evaluate(df, boot=0)
+                res = evaluate(df, boot=0, baseline="plain")
                 if not res["ok"]:
                     continue
                 for m in CHALLENGERS:

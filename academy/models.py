@@ -7,7 +7,7 @@ from typing import Callable, Optional
 
 @dataclass(frozen=True)
 class Concept:
-    num: int                        # 1..33, the tracked concept number
+    num: int                        # 1..36, the tracked concept number
     id: str
     name: str
     level: int

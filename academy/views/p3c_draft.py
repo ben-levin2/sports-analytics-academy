@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from .. import data, smalldata as SD, theme as T, ui
+import json
+
+from .. import data, forward as F, smalldata as SD, theme as T, ui
 from .p3_level3 import _load, _log, _reliability
 
 COLORS = {"plain": T.FAINT, "bayes": T.PRIMARY, "gam": T.ACCENT, "survival": T.NEUTRAL_LIGHT,
@@ -12,8 +14,8 @@ COLORS = {"plain": T.FAINT, "bayes": T.PRIMARY, "gam": T.ACCENT, "survival": T.N
 
 
 @st.cache_data(show_spinner="Running the class-by-class competition…")
-def _eval(df, boot):
-    return SD.evaluate(df, boot=boot)
+def _eval(df, boot, baseline="best"):
+    return SD.evaluate(df, boot=boot, baseline=baseline)
 
 
 @st.cache_data(show_spinner="Running the failure study (about 10–20 seconds)…")
@@ -31,8 +33,11 @@ def _summary_table(res):
     rows = []
     for m in s.index:
         b = res["boot"].get(m)
-        rows.append({"Model": SD.NAMES[m], "Test AUC": f"{s.loc[m, 'auc']:.3f}",
-                     "AUC gain vs baseline": "baseline" if m == "plain" else f"{s.loc[m, 'gain']:+.3f}",
+        base = res.get("baseline", "plain")
+        name = SD.NAMES[m] + (" (baseline)" if m == base else "")
+        rows.append({"Model": name, "Test AUC": f"{s.loc[m, 'auc']:.3f}",
+                     "AUC gain vs baseline": "baseline" if m == base else
+                     ("—" if m in ("plain", "rating_only") else f"{s.loc[m, 'gain']:+.3f}"),
                      "Brier": f"{s.loc[m, 'brier']:.4f}", "Calibration error": f"{s.loc[m, 'ece']:.3f}",
                      "Bootstrap 90% range of gain": f"{b['lo90']:+.3f} to {b['hi90']:+.3f}" if b else "—"})
     t = pd.DataFrame(rows)
@@ -48,7 +53,7 @@ def learning_lab(project):
     noise = c2.select_slider("Measurement noise on inputs (SD)", [0.0, 0.5, 1.0], value=0.0, key="p3c_noise")
     seed = c3.number_input("Program (random seed)", 1, 999, 29, key="p3c_seed")
     df = _sim(per, noise, int(seed))
-    res = _eval(df, 300)
+    res = _eval(df, 300, "plain")
 
     ui.section(1, "The competition", "p3c-1")
     if not res.get("ok"):
@@ -142,6 +147,14 @@ def learning_lab(project):
 
 # =================================================================== Production Candidate
 def production_candidate(project):
+    back, fwd = st.tabs(["Backtest", "Forward test"])
+    with back:
+        _backtest(project)
+    with fwd:
+        forward_test(project)
+
+
+def _backtest(project):
     df, info = _load("draft_outcomes", "p3cprod")
     if "draft_year" not in df.columns or not df["draft_year"].notna().any():
         st.info("No draft_year column: the survival model can't run, and every class is treated as finished. "
@@ -162,6 +175,9 @@ def production_candidate(project):
     if not res.get("ok"):
         ui.gates(lists["bayes"])
         return
+    st.markdown(f"**Baseline used:** {SD.NAMES[res['baseline']]}, the stronger of plain logistic "
+                f"(AUC {res['summary'].loc['plain', 'auc']:.3f}) and rating only "
+                f"(AUC {res['summary'].loc['rating_only', 'auc']:.3f}). Gains below are measured against it.")
     _summary_table(res)
     st.caption(f"{res['n_classes']} test classes, {res['n_test']} recruits, {res['n_drafted']} drafted. "
                f"Three challengers are tested, so the bootstrap bar is split three ways ({SD.BOOT_ALPHA:.2%} each).")
@@ -173,7 +189,76 @@ def production_candidate(project):
     if s.loc["rating_only", "auc"] > s.loc["plain", "auc"] + SD.MIN_AUC_GAIN:
         st.warning(f"The rating-only reference (AUC {s.loc['rating_only', 'auc']:.3f}) beats the plain baseline "
                    f"({s.loc['plain', 'auc']:.3f}) by more than the bar. Beating this baseline is easier than it "
-                   "looks; check each challenger against rating only too before believing a pass.")
+                   "looks; check each challenger against rating only too before believing a pass. "
+                   "(The gates above already use the stronger baseline.)")
     per = res["rows"].groupby("class_year").agg(recruits=("y", "size"), drafted=("y", "sum")).reset_index()
     per["class_year"] = per["class_year"].astype(str)
     ui.table(per, rename={"class_year": "Class", "recruits": "Recruits", "drafted": "Drafted"})
+
+
+# =================================================================== Forward test (concept 36)
+def freeze_forecast(per_class: int, seed: int) -> dict:
+    """Predict the simulated 2022 class as of spring 2023 and freeze predictions + plan (simulation settings inside)."""
+    preds = F.simulate_forecast(per_class=per_class, seed=seed)
+    plan = F.make_plan(2022, written="spring 2023 (simulated)")
+    plan["simulation"] = {"per_class": int(per_class), "seed": int(seed)}
+    return F.freeze(preds, plan)
+
+
+def score_forecast(frozen: dict, observed_through: int) -> dict:
+    if not F.verify(frozen):
+        return {"ok": False, "reason": "Hash does not match: the frozen predictions or plan were changed."}
+    _, plan = F.unpack(frozen)
+    sim = plan["simulation"]
+    out = F.simulate_outcomes(per_class=sim["per_class"], seed=sim["seed"], class_year=plan["class_year"],
+                              observed_through=observed_through)
+    return F.score(frozen, out, observed_through)
+
+
+def forward_test(project):
+    ui.sim_banner("Forward tests here use simulated outcomes: the 2022 class is predicted as of spring 2023, "
+                  "and drafts are revealed only when you score.")
+    st.markdown("**1 · Freeze.** Predictions and the scoring plan are hashed together before any outcome exists.")
+    c1, c2 = st.columns(2)
+    per = c1.select_slider("Recruits in the class", [22, 60, 120], value=120, key="p3c_fwd_per")
+    seed = c2.number_input("Simulated program (seed)", 1, 999, 36, key="p3c_fwd_seed")
+    if st.button("Freeze predictions", type="primary", key="p3c_fwd_freeze"):
+        st.session_state["p3c_frozen"] = freeze_forecast(int(per), int(seed))
+        st.session_state.pop("p3c_fwd_score", None)
+    up = st.file_uploader("…or load a forecast you froze earlier (JSON)", type="json", key="p3c_fwd_up")
+    if up is not None:
+        try:
+            st.session_state["p3c_frozen"] = json.loads(up.getvalue().decode("utf-8"))
+        except Exception:
+            st.error("That file isn't a frozen forecast.")
+    fz = st.session_state.get("p3c_frozen")
+    if not fz:
+        return
+    preds, plan = F.unpack(fz)
+    st.code(f"SHA-256: {fz['hash']}\nClass {plan['class_year']}: {len(preds)} predictions, mean {preds['p'].mean():.3f}\n"
+            f"Target: {plan['target']} (window ends {plan['window_end']})\nPlan: {plan['rule']}", language="text")
+    st.download_button("Download the frozen forecast", json.dumps(fz), file_name=f"forecast_{fz['hash'][:10]}.json",
+                       mime="application/json", key="p3c_fwd_dl")
+    st.markdown("**2 · Score later**, exactly as the frozen plan says.")
+    when = st.select_slider("Score after the draft of", [2025, 2026, 2027], value=2027, key="p3c_fwd_when")
+    if st.button("Reveal outcomes and score", key="p3c_fwd_go"):
+        st.session_state["p3c_fwd_score"] = (when, score_forecast(fz, when))
+    got = st.session_state.get("p3c_fwd_score")
+    if not got:
+        return
+    when, res = got
+    if not res["ok"]:
+        st.error(res["reason"])
+        return
+    _log(project, f"Forward test scored after {when} [hash {fz['hash'][:10]}]")
+    m = st.columns(3)
+    m[0].metric("Window complete?", "Yes" if res["complete"] else "No", f"ends {plan['window_end']}", delta_color="off")
+    m[1].metric("AUC (scored)", f"{res['auc']:.3f}")
+    if "ece" in res:
+        m[2].metric("Calibration error (scored)", f"{res['ece']:.3f}")
+    else:
+        m[2].metric("Calibration", "not scored", f"window incomplete", delta_color="off")
+        st.info(f"Only {res['observed_rate']:.3f} drafted so far vs a forecast of {res['mean_forecast']:.3f} for the full "
+                f"window. Calibration would read {res['ece_if_misused']:.3f}, but that's the window mismatch, not the "
+                "model: the plan scores ranking only until the window closes.")
+    st.caption("Simulated forward test: it practices the procedure and can never count toward a Production Candidate verdict.")

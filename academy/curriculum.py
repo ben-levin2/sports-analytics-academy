@@ -1,4 +1,4 @@
-"""The six levels and 33 tracked concepts, plus helpers that combine content with progress.
+"""The six levels and 36 tracked concepts, plus helpers that combine content with progress.
 
 Two separate measures:
 - Lesson completion  = your BEST quiz score on a lesson (>= 70% completed, >= 90% mastered).
@@ -66,6 +66,10 @@ CONCEPTS = (
     _C(31, "monotonic-gam", "GAMs and monotonic constraints", 3, "Smooth curves that are only allowed to go one direction."),
     _C(32, "transfer-learning", "Transfer learning for small data", 5, "Learn on a large related problem, then adapt to your small one."),
     _C(33, "discrete-time-survival", "Discrete-time survival models", 3, "Person-period rows, so unfinished outcomes still count as information."),
+    # Honest evaluation
+    _C(34, "preregistered-bar", "Write the bar before you look", 6, "Fix the pass bar (gain, uncertainty, calibration) before seeing results; stricter when testing more models."),
+    _C(35, "strong-baselines", "Weak baselines make fake wins", 3, "Judge a model against the best simple baseline, not the easiest one."),
+    _C(36, "forward-tests", "Forward tests", 3, "Freeze predictions with a hash before outcomes exist, then score them with a plan written in advance."),
 )
 CONCEPT_BY_ID = {c.id: c for c in CONCEPTS}
 
@@ -89,6 +93,9 @@ COMPARISONS = (
     ("Monotonic GAMs vs straight lines vs trees", 3, "L3.9"),
     ("Discrete-time survival vs logistic on finished classes", 3, "L3.10"),
     ("Transfer learning vs training from scratch vs pooling", 5, "L5.7"),
+    ("Weak vs strong simple baselines", 3, "L3.11"),
+    ("Backtests vs frozen forward tests", 3, "L3.12"),
+    ("A bar written first vs a bar moved after looking", 6, "L6.3"),
 )
 
 
