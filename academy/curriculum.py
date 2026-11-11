@@ -67,12 +67,14 @@ CONCEPT_BY_ID = {c.id: c for c in CONCEPTS}
 COMPARISONS = (
     ("Bayesian regression vs ordinary regression", 1, "L1.4"),
     ("Ridge regression vs hierarchical modeling", 5, "planned"),
-    ("Gaussian processes vs ordinary regression", 3, "planned"),
+    ("Gaussian processes vs ordinary regression", 3, "L3.7"),
     ("HMMs vs LSTMs", 4, "planned"),
     ("Calibration vs discrimination", 3, "L3.1"),
     ("Prediction intervals vs confidence vs credible intervals", 1, "L1.4 (intro); full in Level 4"),
     ("Marginal likelihood vs cross-validation", 1, "L1.5"),
     ("Random splits vs time-based validation", 3, "L3.2"),
+    ("Kaplan-Meier vs Cox vs logistic regression", 3, "L3.3–L3.4"),
+    ("RBF vs Matérn kernels", 3, "L3.6"),
 )
 
 

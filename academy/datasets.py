@@ -49,6 +49,22 @@ def _check_rates(df):
     return errs
 
 
+def _check_hometowns(df):
+    errs = []
+    if not df["lat"].between(-90, 90).all() or not df["lon"].between(-180, 180).all():
+        errs.append("lat must be between -90 and 90, and lon between -180 and 180.")
+    return errs
+
+
+def _check_roster(df):
+    errs = []
+    if (df["seasons_observed"] < 1).any():
+        errs.append("seasons_observed must be 1 or more.")
+    if not df["contributed"].isin([0, 1]).all():
+        errs.append("contributed must be 0 or 1.")
+    return errs
+
+
 def _check_profiles(df):
     from .archetypes import feature_candidates
     errs = []
@@ -86,14 +102,15 @@ SPECS = {s.id: s for s in [
           "contributed": "1 = reached threshold in the last observed season, 0 = censored"},
          {"recruit_rating": "composite rating", "position": "position",
           "left_before_contributing": "1 = left the roster before contributing (alternative outcome)"},
-         {"~67 teams x 10 classes": data.make_roster_careers}, ["P3A"],
+         {"~67 teams x 10 classes": data.make_roster_careers}, ["P3A"], _check_roster,
          numeric=["class_year", "seasons_observed", "contributed"]),
     Spec("hometowns", "Recruit hometowns",
          "One row per player with hometown coordinates and a production outcome.",
          {"player_id": "unique player key", "lat": "hometown latitude", "lon": "hometown longitude",
           "production": "college production measure"},
-         {"local_density": "population-density proxy (needed to separate talent from population)"},
-         {"Hometowns (simulated metros)": data.make_hometown_production}, ["P3B"],
+         {"local_density": "population-density proxy (needed to separate talent from population)",
+          "class_year": "recruiting class (needed for time-based validation)", "recruit_rating": "composite rating"},
+         {"Hometowns (simulated metros)": data.make_hometown_production}, ["P3B"], _check_hometowns,
          numeric=["lat", "lon", "production"]),
     Spec("game_logs", "Game-by-game performance",
          "One row per player-game, in order.",

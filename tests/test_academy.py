@@ -11,7 +11,8 @@ sys.path.insert(0, str(ROOT))
 import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 
-from academy import archetypes, config, curriculum, data, datasets, progress, quiz, shrinkage, validation  # noqa: E402
+from academy import (archetypes, config, curriculum, data, datasets, progress, quiz, shrinkage, spatial,  # noqa: E402
+                     survival, validation)
 from academy.labs import EXERCISES  # noqa: E402
 from academy.lessons import LOAD_ERRORS, all_lessons  # noqa: E402
 from academy.projects_data import PROJECTS  # noqa: E402
@@ -121,6 +122,42 @@ def test_level2_complete_and_archetype_engine():
     gl = archetypes.gates(res, {"source": "simulated", "real": False})
     assert archetypes.verdict(gl) == "Learning Lab only"
     assert archetypes.gates({"ok": False, "reason": "x"}, {"source": "upload", "real": True})[0][1] is False
+
+
+def test_level3_complete_and_survival_engine():
+    import numpy as np
+    level3 = {c.id for c in curriculum.concepts_in_level(3)}
+    assert level3 <= {cid for l in all_lessons() for cid in l.concept_ids}
+    # Kaplan-Meier on a tiny hand-checked example: S(2) = (1 - 20/100) * (1 - 14/70) = 0.64
+    t = np.r_[np.ones(20), np.ones(10), np.full(14, 2), np.full(56, 3)]
+    e = np.r_[np.ones(20), np.zeros(10), np.ones(14), np.zeros(56)]
+    assert abs(survival.km_at(survival.kaplan_meier(t, e), 2) - 0.64) < 1e-9
+    df = data.make_roster_careers()
+    X, names = survival.design(df)
+    m = survival.cox_fit(X, df["seasons_observed"], df["contributed"])
+    assert 1.5 < np.exp(m["beta"][0]) < 2.0                       # simulated rating effect is recovered
+    res = survival.evaluate_contribution(df)
+    assert res["ok"] and res["leak_ok"] and res["n_classes"] >= 3
+    assert survival.verdict(survival.gates(res, {"source": "simulated", "real": False})) == "Learning Lab only"
+    tr = survival.truncate(df[df["class_year"] < 2022], 2021)
+    assert (tr["known_through"] <= 2021).all()
+
+
+def test_spatial_engine():
+    df = data.make_hometown_production()
+    t = spatial.regional_table(df)
+    assert t["players"].sum() == len(df)
+    vg = spatial.empirical_variogram(df)
+    assert (vg["semivariance"] > 0).all()
+    gp = spatial.fit_gp(df[["lon", "lat"]], df["production"] - df["production"].mean(), "RBF", cap=300)
+    mu, sd = spatial.predict_latent(gp, [[-95.4, 29.8]])
+    assert sd[0] >= 0
+    res = spatial.evaluate_spatial(df)
+    assert res["ok"] and res["leak_ok"] and 0.7 < res["coverage"] < 0.9
+    gl = spatial.gates(res, {"source": "simulated", "real": False})
+    assert spatial.verdict(gl) == "Learning Lab only"
+    assert any(n == "Controls for population density" and ok for n, ok, _ in gl)
+    assert spatial.gates(spatial.evaluate_spatial(df.drop(columns="class_year")), {"source": "upload", "real": True})[0][1] is False
 
 
 def test_profile_upload_validation():
@@ -235,6 +272,12 @@ def test_app_pages_projects_and_quiz_flow():
     at.button(key="p2_eval").click().run()
     assert not at.exception
     assert at.session_state["progress"]["projects"]["p2-archetypes"]["runs"][-1]["verdict"].startswith("Learning Lab only")
+    for pid, btn in [("p3a-time-to-contribution", "p3a_eval"), ("p3b-geographic-recruiting", "p3b_eval")]:
+        at.selectbox(key="proj_pick").set_value(pid).run()
+        assert not at.exception, (pid, at.exception)
+        at.button(key=btn).click().run()
+        assert not at.exception, (pid, at.exception)
+        assert at.session_state["progress"]["projects"][pid]["runs"][-1]["verdict"].startswith("Learning Lab only")
 
     at.sidebar.radio(key="nav").set_value("Lessons").run()
     for lesson in all_lessons():

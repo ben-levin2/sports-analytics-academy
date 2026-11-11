@@ -221,9 +221,12 @@ def make_hometown_production(n: int = 3000, seed: int = 505) -> pd.DataFrame:
     lon = np.array([_METROS[i][1] for i in idx]) + rng.normal(0, 1.5, n)
     density = np.array([_METROS[i][2] for i in idx]) * np.exp(-((rng.normal(0, 1, n)) ** 2) / 2)
     spatial = 5.0 * np.sin(np.radians(lat - 25) * 8) + 3.0 * np.cos(np.radians(lon + 95) * 6)   # modest true effect
-    production = 50 + spatial + rng.normal(0, 10, n)
+    rating = np.clip(rng.normal(0.86, 0.04, n), 0.75, 0.999)
+    production = 50 + spatial + 80 * (rating - 0.86) + rng.normal(0, 10, n)
     df = pd.DataFrame({"player_id": [f"H{i + 1:05d}" for i in range(n)], "lat": lat.round(3),
-                       "lon": lon.round(3), "local_density": density.round(2), "production": production.round(1)})
+                       "lon": lon.round(3), "local_density": density.round(2),
+                       "class_year": rng.integers(2016, 2026, n), "recruit_rating": rating.round(3),
+                       "production": production.round(1), "true_spatial_effect": spatial.round(2)})
     return _tag(df)
 
 

@@ -42,7 +42,7 @@ Six levels, **28 tracked concepts**. The four predictive-modeling methods sit in
 | 5 Advanced Statistical Modeling | 21–23, **27 Mixed-effects models** | P5 Hierarchical Player Development |
 | 6 Optimization & Research | 24 | P6A Constrained Lineup Optimization, P6B Integrated Research |
 
-Built now: all Level 1 lessons (concepts 1–6), Level 2 lessons (concepts 7–10), lessons for concepts 25–26 (calibration and Brier score, time-based CV), the full Level 1 and Level 2 projects with automated Production Candidate checks, runnable Learning Lab starters for the other six projects, and 12 Python Lab exercises. Neural VAEs need PyTorch, which isn't installed; L2.4 teaches the exact linear version instead.
+Built now: lessons for Levels 1–3 (concepts 1–17, 25, 26; Gaussian processes split into three short lessons), the full Level 1, 2 and 3 projects (P1, P2, P3A, P3B) with automated Production Candidate checks, runnable Learning Lab starters for P4–P6B, and 12 Python Lab exercises. No dependencies beyond requirements.txt: the Cox model and Kaplan-Meier are written with NumPy, and Gaussian processes use scikit-learn. Neural VAEs need PyTorch, which isn't installed; L2.4 teaches the exact linear version instead.
 
 ## Progress rules
 

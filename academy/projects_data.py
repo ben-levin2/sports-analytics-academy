@@ -113,132 +113,80 @@ PROJECTS = [
 
     # ------------------------------------------------------------------ LEVEL 3A
     Project(
-        id="p3a-time-to-contribution", level=3, slot="A", title="Time Until Player Contribution",
-        objective="Estimate how long recruits take to become contributors (a fixed snap or production threshold), correctly handling players we never saw reach it.",
+        id="p3a-time-to-contribution", level=3, slot="A", status="built", title="Time Until Player Contribution",
+        objective="Estimate how long recruits take to reach a fixed contribution threshold, handling players we never saw reach it, and test whether a Cox model predicts 'contributes by year 2' better than a rating-tier baseline.",
         concept_ids=["survival-analysis", "cox-ph", "calibration-brier", "time-based-cv"], dataset_id="roster_careers",
-        psfal="Roster data covering about 67 teams over 10 years is the natural input. Time-to-contribution by rating band, position and program is a development question PSFAL cares about directly. Players still on roster at the end of the data, or who left, are **censored**, not failures.",
+        psfal="""
+**The academy is separate from PSFAL and never changes it.**
+
+- **Your roster data** (~67 teams, ~10 years) fits this directly. Every recent class is censored, so Kaplan-Meier and Cox are the right tools.
+- **Model 8 connection:** Model 8 forecasts development from rating and early production. Time-to-contribution is a related outcome that keeps the recent, incomplete classes instead of dropping them.
+- **Your rule:** the Production Candidate tab predicts each new class at enrollment, using only what was known before it arrived, and must beat a rating-tier baseline with calibrated probabilities.
+""",
         learning=Track(
-            summary="Build a Kaplan-Meier curve by hand on simulated roster careers and compare rating tiers.",
-            steps=["Define contribution with one consistent threshold (e.g., 300+ snaps in a season).",
-                   "Record seasons observed and whether the event happened (censoring flag).",
-                   "Compute a Kaplan-Meier curve; compare with the naive 'drop censored players' approach.",
-                   "Compare rating tiers.", "Repeat with 'left the roster' as the event (an alternative outcome)."],
-            code='''import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from academy.data import make_roster_careers
-
-df = make_roster_careers()            # SIMULATED: ~67 teams x 10 classes; contribution = 300+ snaps
-print(f"{len(df)} recruits, {df['contributed'].mean():.0%} observed contributing, rest censored")
-
-def kaplan_meier(t, event):
-    """Share still NOT contributing after each season, counting censored players correctly."""
-    times = np.arange(1, t.max() + 1)
-    at_risk, surv, out = len(t), 1.0, []
-    for s in times:
-        d = ((t == s) & (event == 1)).sum()          # contributed in season s
-        c = ((t == s) & (event == 0)).sum()          # censored in season s
-        surv *= 1 - d / at_risk if at_risk else 1
-        out.append(surv)
-        at_risk -= d + c
-    return times, np.array(out)
-
-fig, ax = plt.subplots()
-df["tier"] = pd.cut(df["recruit_rating"], [0, 0.84, 0.89, 1], labels=["< .84", ".84-.89", ".89+"])
-for tier, g in df.groupby("tier", observed=True):
-    t, s = kaplan_meier(g["seasons_observed"].to_numpy(), g["contributed"].to_numpy())
-    ax.step(t, 1 - s, where="post", label=f"rating {tier}")
-    print(f"rating {tier}: {1 - s[min(2, len(s) - 1)]:.0%} contributing by season 3 (Kaplan-Meier)")
-
-naive = df[df["contributed"] == 1]["seasons_observed"].mean()
-print(f"\\nNaive mean time among contributors only: {naive:.2f} seasons (biased: ignores censoring)")
-ax.set_xlabel("Seasons since enrolling"); ax.set_ylabel("Share who have contributed")
-ax.set_title("Time to first contribution (simulated)"); ax.legend()
-''',
-            limitations=["Simulated careers; the contribution threshold is built in, not estimated.",
-                         "Recent classes are heavily censored; their curves end early.",
-                         "Transfers in/out and redshirts need explicit rules in real data."],
+            summary="Draw Kaplan-Meier curves by group, see what goes wrong when censoring is ignored, fit a Cox model, check the proportional-hazards assumption, and switch to 'left the roster' as the outcome.",
+            steps=["State the contribution threshold you're using (here: 300+ snaps in a season).",
+                   "Compare Kaplan-Meier with the two naive answers.", "Compare groups (rating tiers, positions).",
+                   "Fit the Cox model and read each hazard ratio with its interval.",
+                   "Check proportional hazards (season 1 vs seasons 2+).",
+                   "Switch the outcome to 'left the roster' and compare."],
+            limitations=["Simulated careers: the threshold is built in, and position has no true effect.",
+                         "Transfers are treated as censoring for the contribution outcome; if benched players leave, that biases things.",
+                         "Recent classes are heavily censored, so their curves end early.",
+                         "Our Cox fitter uses the Breslow method for tied seasons; fine for learning, approximate with many ties."],
         ),
         production=Track(
-            summary="A contribution-timing model qualifies only if it beats a rating-tier baseline on later recruiting classes, with calibrated probabilities.",
-            steps=["Fix the threshold and the metric before looking at outcomes.",
-                   "Train on early classes, test on later classes (respecting censoring).",
-                   "Compare a Cox model with the Kaplan-Meier-by-tier baseline.",
-                   "Check calibration of P(contributes by year 2) with a reliability diagram and Brier score."],
-            baseline="Kaplan-Meier curves by rating tier.",
-            metric="Brier score for P(contributes by season 2), and concordance (C-index).",
-            validation="Train on classes 2016-2020, test on later classes; never use outcomes after the training cut-off.",
+            summary="For each recruiting class, predict P(contributes by season 2) at enrollment using only earlier classes as known at that time; score with the Brier score.",
+            steps=["Upload real roster careers with recruit_rating and mark them real.",
+                   "Run the evaluation; training data is cut off at the season before each class enrolls.",
+                   "Read every gate, including calibration.", "Compare AUC too, but the registered metric is the Brier score."],
+            baseline="Kaplan-Meier within rating tiers (thirds of the training ratings).",
+            metric="Brier score of P(contributes by season 2), per class.",
+            validation="Rolling origin by recruiting class, with training outcomes truncated at the season before enrollment (concept 26).",
             gates=STANDARD_GATES,
         ),
-        questions=["Why is dropping censored players biased? In which direction?",
-                   "Does the gap between rating tiers shrink after year 3?",
-                   "How should a player who transferred out before contributing be treated, as censored or as a competing outcome?"],
+        questions=["How much faster do top-third recruits break through, and is the effect steady over seasons?",
+                   "How different is the 'left the roster' curve, and should departures be modeled separately?",
+                   "Cox beats the tier baseline by only ~2% here. Is that worth the extra complexity for a staff?"],
     ),
 
     # ------------------------------------------------------------------ LEVEL 3B
     Project(
-        id="p3b-geographic-recruiting", level=3, slot="B", title="Geographic Recruiting Analysis",
-        objective="Build a smooth map of player production from hometown coordinates with Gaussian processes (Kriging), with uncertainty, without mistaking population for talent.",
+        id="p3b-geographic-recruiting", level=3, slot="B", status="built", title="Geographic Recruiting Analysis",
+        objective="Map average recruit production by hometown with a Gaussian process (Kriging), with uncertainty, without mistaking population for talent, and test whether location adds predictive value.",
         concept_ids=["gp-regression", "kernel-functions", "rbf-kernels", "matern-kernels", "kriging"], dataset_id="hometowns",
-        psfal="Hometown latitude and longitude in roster data allow a map of *average production per recruit* by region. The trap: regions with more people produce more players, so a cluster of productive players is not by itself a recruiting advantage.",
+        psfal="""
+**The academy is separate from PSFAL and never changes it.**
+
+- **Hometown coordinates** in roster data support this map. Use production *per recruit*, adjusted for rating and population, never counts.
+- **A real recruiting advantage** means recruits from a region outperform after accounting for rating, population and sample size. The uncertainty map shows where you can't tell.
+- **Your rule:** a geographic term goes on your site only if it beats a rating + density baseline on later classes, with honest intervals.
+""",
         learning=Track(
-            summary="Fit GP regressions with RBF and Matérn kernels to simulated hometowns, compare them, and separate density from quality.",
-            steps=["Plot hometowns: notice they follow population.", "Fit a GP with an RBF kernel plus noise.",
-                   "Fit a GP with a Matérn kernel; compare fitted length scales and log marginal likelihood (L1.5!).",
-                   "Predict production on a grid with standard deviations.",
-                   "Show that player COUNTS track density, while AVERAGE production barely varies."],
-            code='''import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C, Matern, WhiteKernel
-from academy.data import make_hometown_production
-
-df = make_hometown_production()                       # SIMULATED hometowns, not census data
-sample = df.sample(800, random_state=0)               # GPs scale as n^3: start small
-X = sample[["lon", "lat"]].to_numpy()
-y = sample["production"].to_numpy() - sample["production"].mean()
-
-# length scales in degrees; bounds stop the fit from collapsing to pure noise
-kernels = {"RBF": C(10.0) * RBF(length_scale=8.0, length_scale_bounds=(2, 60)) + WhiteKernel(100.0),
-           "Matern 1.5": C(10.0) * Matern(length_scale=8.0, length_scale_bounds=(2, 60), nu=1.5) + WhiteKernel(100.0)}
-fits = {}
-for name, k in kernels.items():
-    gp = GaussianProcessRegressor(kernel=k, normalize_y=False, random_state=0).fit(X, y)
-    fits[name] = gp
-    print(f"{name:<10} log marginal likelihood {gp.log_marginal_likelihood_value_:.1f}   kernel: {gp.kernel_}")
-
-# Population vs quality: counts follow density, average production barely moves
-df["dense"] = df["local_density"] > df["local_density"].median()
-print("\\nPlayers from dense areas:", df["dense"].mean().round(2),
-      "| mean production dense vs sparse:",
-      df.groupby("dense")["production"].mean().round(1).to_dict())
-
-gx, gy = np.meshgrid(np.linspace(-123, -70, 60), np.linspace(25, 49, 35))
-mu, sd = fits["Matern 1.5"].predict(np.c_[gx.ravel(), gy.ravel()], return_std=True)
-fig, axes = plt.subplots(1, 2, figsize=(10, 3.4))
-a = axes[0].contourf(gx, gy, mu.reshape(gx.shape), 14, cmap="coolwarm"); plt.colorbar(a, ax=axes[0])
-axes[0].scatter(X[:, 0], X[:, 1], s=3, c="k", alpha=0.4); axes[0].set_title("Predicted production vs average")
-b = axes[1].contourf(gx, gy, sd.reshape(gx.shape), 14, cmap="viridis"); plt.colorbar(b, ax=axes[1])
-axes[1].set_title("Uncertainty (SD): high where no players")
-''',
-            limitations=["Simulated metros and densities; real work needs census population as a control.",
-                         "The true spatial effect is deliberately small. Most variation is individual noise.",
-                         "800-point subsample; full data needs sparse or approximate GPs.",
-                         "Production depends on the college program too, which is not modeled here."],
+            summary="See where recruits come from vs how they perform, fit RBF and Matérn Kriging maps with uncertainty, read the variogram, and check regions for sample size.",
+            steps=["Compare the count map with the average-production map.",
+                   "Fit RBF and Matérn kernels; compare length scales and marginal likelihood.",
+                   "Read the uncertainty map: where can't you tell?",
+                   "Read the variogram: how quickly do players stop resembling their neighbours?",
+                   "Check the regional table: players, average, standard error, players per density."],
+            limitations=["Simulated hometowns and densities, not census data.",
+                         "The true regional effect is deliberately small; most variation is individual.",
+                         "Distances are in degrees, so east-west distances are slightly stretched at northern latitudes.",
+                         "Maps use at most 600 players per fit, because Gaussian processes slow down sharply with size."],
         ),
         production=Track(
-            summary="A geographic model qualifies only if location adds out-of-sample predictive value beyond rating and program.",
-            steps=["Fix the outcome and metric.", "Baseline: rating + program, no location.",
-                   "Add the GP spatial term; evaluate on later recruiting classes.",
-                   "Check that interval coverage holds in sparse regions."],
-            baseline="Regression on rating and program, no geography.",
-            metric="Out-of-sample MAE of production; interval coverage.",
-            validation="Fit on earlier classes, test on later classes; spatial blocks held out to detect overfitting to dense areas.",
+            summary="For each recruiting class, does a GP on hometown location improve production predictions beyond rating + population density?",
+            steps=["Upload real hometowns with class_year, recruit_rating and local_density; mark them real.",
+                   "Run the rolling-origin test (training on earlier classes only).",
+                   "Read every gate, including density control and interval calibration."],
+            baseline="Ridge regression on recruit_rating + local_density, with no location.",
+            metric="Mean absolute error of production per recruiting class.",
+            validation="Rolling origin by recruiting class (concept 26); 80% interval coverage checked (concept 25).",
             gates=STANDARD_GATES + ["Controls for population density and sample size per region"],
         ),
-        questions=["Is a region with many productive players producing better players, or just more players?",
-                   "When does the Matérn kernel fit better than RBF, and what does the length scale mean in miles?",
-                   "Where is the map most uncertain, and how should that change recruiting decisions?"],
+        questions=["Is a region producing better players, or just more players?",
+                   "Does the Matérn kernel fit better than RBF? What does the length scale mean in miles?",
+                   "Location adds only ~2% here. Would that change a single recruiting decision?"],
     ),
 
     # ------------------------------------------------------------------ LEVEL 4
