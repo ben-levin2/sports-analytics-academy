@@ -1,6 +1,6 @@
 """Concepts 29-33 and the Small-Data Draft Model project (P3C).
 
-Four models predict P(drafted within 5 years) for a recruiting class, judged at the end of its first season:
+Five models predict P(drafted within 5 years) for a recruiting class, judged at the end of its first season:
   plain     plain logistic regression (almost no penalty)
   rating_only  logistic on rating alone (a simple reference)
 The Learning Lab judges gains against the plain logistic. The Production Candidate test judges them against the
@@ -8,6 +8,7 @@ STRONGER of plain logistic and rating-only (higher pooled test AUC), so a weak b
   bayes     Bayesian logistic regression with informative Normal priors (concepts 29-30)
   gam       monotonic generalized additive model: smooth curves that can only rise (concept 31)
   survival  discrete-time survival on person-period rows, so unfinished classes still count (concept 33)
+  boost     gradient boosting: many small trees added one at a time (concept 39; scikit-learn, no XGBoost needed)
 
 Everything is NumPy/SciPy. The rules of the Production Candidate test are fixed here, before any data is seen.
 """
@@ -24,14 +25,14 @@ from . import validation as V
 PERIODS = (3, 4, 5)                 # drafted 3, 4 or 5 years after the class enrolled
 WINDOW = PERIODS[-1]
 LAG = 1                             # predictions are made one year after enrolling (year-1 stats known)
-MODELS = ("plain", "bayes", "gam", "survival")
+MODELS = ("plain", "bayes", "gam", "survival", "boost")
 CHALLENGERS = MODELS[1:]
 NAMES = {"plain": "Plain logistic", "bayes": "Bayesian logistic", "gam": "Monotonic GAM",
-         "survival": "Discrete-time survival", "rating_only": "Rating only (reference)"}
+         "survival": "Discrete-time survival", "boost": "Gradient boosting", "rating_only": "Rating only (reference)"}
 
 MIN_AUC_GAIN = 0.02
 BOOT_B = 1000
-BOOT_ALPHA = 0.05 / len(CHALLENGERS)          # one-sided, split across the 3 challengers (Bonferroni)
+BOOT_ALPHA = 0.05 / len(CHALLENGERS)          # one-sided, split across all challengers (Bonferroni)
 MAX_ECE = 0.05
 MIN_TEST_CLASSES = 4
 MIN_TEST_DRAFTED = 15
@@ -82,6 +83,25 @@ def predict_logistic(model, X, moderated=False):
         var = np.einsum("ij,jk,ik->i", X, model["cov"], X)
         eta = eta / np.sqrt(1 + np.pi * var / 8)
     return expit(eta)
+
+
+# ---------------------------------------------------------------- concept 38: Bayesian linear regression
+def bayes_linear(X, y, prior_mean, prior_sd, sigma):
+    """Conjugate Bayesian linear regression with Normal priors on the coefficients and a KNOWN noise SD.
+    Exact posterior (no approximation): precision = prior precision + X'X / sigma^2."""
+    X, y = np.asarray(X, float), np.asarray(y, float)
+    prec0 = np.diag(1.0 / np.asarray(prior_sd, float) ** 2)
+    cov = np.linalg.inv(prec0 + X.T @ X / sigma ** 2)
+    mean = cov @ (prec0 @ np.asarray(prior_mean, float) + X.T @ y / sigma ** 2)
+    return {"mean": mean, "cov": cov, "sigma": float(sigma)}
+
+
+def predict_bayes_linear(model, X):
+    """Predictive mean and SD for new rows: noise plus uncertainty in the coefficients."""
+    X = np.asarray(X, float)
+    mu = X @ model["mean"]
+    sd = np.sqrt(model["sigma"] ** 2 + np.einsum("ij,jk,ik->i", X, model["cov"], X))
+    return mu, sd
 
 
 # ---------------------------------------------------------------- design matrices
@@ -229,11 +249,24 @@ def fit_predict(train_full: pd.DataFrame, pp: pd.DataFrame | None, test: pd.Data
     out = {"plain": predict_logistic(fit_logistic(X, y, *d.priors(False)), Xt)}
     out["bayes"] = predict_logistic(fit_logistic(X, y, *d.priors(True)), Xt, moderated=True)
     out["gam"] = predict_gam(fit_monotone_gam(d, train_full, y), test)
+    out["boost"] = predict_boost(train_full, test, d)
     out["rating_only"] = predict_logistic(fit_logistic(X[:, :2], y, np.zeros(2), np.full(2, 100.0)), Xt[:, :2])
     if pp is not None and len(pp) and pp["event"].sum() >= MIN_TRAIN_DRAFTED:
         ds = Design(pp.drop_duplicates("player_id"))
         out["survival"] = predict_survival(fit_survival(ds, pp), ds, test)
     return out
+
+
+def boost_model():
+    """Small, shallow, slow-learning ensemble: the settings a careful person would pick for ~100-300 rows."""
+    from sklearn.ensemble import GradientBoostingClassifier
+    return GradientBoostingClassifier(n_estimators=100, learning_rate=0.05, max_depth=2, subsample=0.8,
+                                      min_samples_leaf=5, random_state=0)
+
+
+def predict_boost(train_full, test, design: Design):
+    X, Xt = design.linear(train_full)[:, 1:], design.linear(test)[:, 1:]
+    return boost_model().fit(X, train_full["drafted"]).predict_proba(Xt)[:, 1]
 
 
 def _has_draft_years(df):
@@ -273,7 +306,7 @@ def evaluate(df: pd.DataFrame, boot: int = BOOT_B, seed: int = 0, baseline: str 
         return {"ok": False, "reason": "Need classes whose 5-year draft window has closed, with at least "
                                        f"{MIN_TRAIN_ROWS} finished recruits (and {MIN_TRAIN_DRAFTED}+ drafted) before them."}
     r = pd.concat(rows, ignore_index=True)
-    models = [m for m in ("plain", "bayes", "gam", "survival", "rating_only") if m in r.columns]
+    models = [m for m in ("plain", "bayes", "gam", "survival", "boost", "rating_only") if m in r.columns]
     summ = pd.DataFrame({m: {"auc": V.auc(r[m], r["y"]), "brier": V.brier(r[m], r["y"]),
                              "ece": V.ece(r[m], r["y"])} for m in models}).T
     base = "plain"

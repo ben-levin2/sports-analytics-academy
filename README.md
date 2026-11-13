@@ -45,7 +45,7 @@ Six levels, **28 tracked concepts**. The four predictive-modeling methods sit in
 | 5 Advanced Statistical Modeling | 21–23, **27 Mixed-effects models** | P5 Hierarchical Player Development |
 | 6 Optimization & Research | 24 | P6A Constrained Lineup Optimization, P6B Integrated Research |
 
-Built now: all 36 concepts have lessons (40 lessons across six levels), including the small-data set (concepts 29–33: regularization, Bayesian logistic with informative priors, monotonic GAMs, transfer learning, discrete-time survival) and honest evaluation (concepts 34–36: write the bar before you look, weak baselines make fake wins, frozen forward tests). All 9 projects (P1–P6B, including P3C Small-Data Draft Model) have interactive Learning Lab pages and automated Production Candidate checks, the Integrated Research Project runs a scoreboard across every level, and there are 12 Python Lab exercises. Only NumPy, SciPy, scikit-learn, statsmodels (plus Streamlit, pandas, Matplotlib) are required; PyTorch and PyMC are optional.
+Built now: all 39 concepts have lessons (43 lessons across six levels), including the small-data set (concepts 29–33: regularization, Bayesian logistic with informative priors, monotonic GAMs, transfer learning, discrete-time survival) and honest evaluation (concepts 34–36: write the bar before you look, weak baselines make fake wins, frozen forward tests), plus three classic methods (concepts 37–39: Lasso, Bayesian linear regression, gradient boosting, where gradient boosting is a fourth P3C challenger). All 9 projects (P1–P6B, including P3C Small-Data Draft Model) have interactive Learning Lab pages and automated Production Candidate checks, the Integrated Research Project runs a scoreboard across every level, and there are 12 Python Lab exercises. Only NumPy, SciPy, scikit-learn, statsmodels (plus Streamlit, pandas, Matplotlib) are required; PyTorch and PyMC are optional.
 
 ## Progress rules
 
@@ -88,7 +88,7 @@ Run `pytest -q` after any change.
 ```
 app.py                     entry point, sidebar navigation
 academy/config.py          thresholds, paths, timezone
-academy/curriculum.py      6 levels, 36 concepts, concept mastery, recommendations
+academy/curriculum.py      6 levels, 39 concepts, concept mastery, recommendations
 academy/progress.py        persistence and lesson status (no Streamlit, testable)
 academy/datasets.py        dataset registry: upload > configured path > simulated
 academy/data.py            simulated football data generators

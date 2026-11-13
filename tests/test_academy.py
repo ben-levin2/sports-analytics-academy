@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 os.environ["ACADEMY_DATA_DIR"] = tempfile.mkdtemp()   # never touch real progress or uploads
 sys.path.insert(0, str(ROOT))
 
+import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import pytest  # noqa: E402
 
@@ -22,8 +23,8 @@ from academy.runner import run_code  # noqa: E402
 # ---------------------------------------------------------------- curriculum integrity
 def test_28_concepts_six_levels():
     nums = sorted(c.num for c in curriculum.CONCEPTS)
-    assert nums == list(range(1, 37))                     # original 28, small-data 29-33, honest evaluation 34-36
-    assert len(curriculum.CONCEPT_BY_ID) == 36
+    assert nums == list(range(1, 40))                     # original 28, small-data 29-33, honest evaluation 34-36, classic 37-39
+    assert len(curriculum.CONCEPT_BY_ID) == 39
     assert [c.num for c in curriculum.CONCEPTS[:28]] == list(range(1, 29))   # originals unchanged, in order
     assert {c.level for c in curriculum.CONCEPTS} == {1, 2, 3, 4, 5, 6}
     assert len(curriculum.LEVELS) == 6
@@ -505,7 +506,7 @@ def test_original_33_concepts_unchanged_and_in_order():
     first = curriculum.CONCEPTS[:33]
     assert [c.id for c in first] == ORIGINAL_33
     assert [c.num for c in first] == list(range(1, 34))
-    assert [c.num for c in curriculum.CONCEPTS[33:]] == [34, 35, 36]
+    assert [c.num for c in curriculum.CONCEPTS[33:]] == [34, 35, 36, 37, 38, 39]
 
 
 def test_honest_evaluation_lessons():
@@ -517,7 +518,55 @@ def test_honest_evaluation_lessons():
         assert l.level == level and l.concept_ids == [cid]
         assert len(l.quiz) == 5 and all(l.question_concept(q) == cid for q in l.quiz)
         assert "PSFAL" not in l.sports and "Model 8" not in l.sports + l.psfal and "Model 9" not in l.sports + l.psfal
-    assert len(all_lessons()) == 40
+    assert len(all_lessons()) == 43
+
+
+def test_classic_method_lessons():
+    by_id = {l.id: l for l in all_lessons()}
+    want = {"l1-09-lasso": ("lasso", 1), "l1-10-bayesian-linear": ("bayesian-linear", 1),
+            "l3-13-gradient-boosting": ("gradient-boosting", 3)}
+    for lid, (cid, level) in want.items():
+        l = by_id[lid]
+        assert l.level == level and l.concept_ids == [cid]
+        assert len(l.quiz) == 5 and all(l.question_concept(q) == cid for q in l.quiz)
+        assert "PSFAL" not in l.sports
+
+
+def test_lasso_zeroes_inputs_ridge_does_not():
+    import warnings
+    from sklearn.linear_model import LogisticRegression
+    from academy.data import make_draft_classes
+    from academy.smalldata import Design
+    warnings.filterwarnings("ignore")
+    df = make_draft_classes(); tr = df[df["class_year"] <= 2013]
+    X = Design(tr).linear(tr)[:, 1:]
+    l1 = LogisticRegression(penalty="l1", C=0.5, solver="saga", max_iter=20000, tol=1e-6).fit(X, tr["drafted"]).coef_[0]
+    l2 = LogisticRegression(penalty="l2", C=0.5, solver="saga", max_iter=20000, tol=1e-6).fit(X, tr["drafted"]).coef_[0]
+    assert np.sum(l1 == 0) >= 3 and np.sum(l2 == 0) == 0
+
+
+def test_bayes_linear_matches_ridge_and_shrinks_with_data():
+    from sklearn.linear_model import Ridge
+    from academy import smalldata as SD
+    rng = np.random.default_rng(0)
+    x = rng.normal(size=60); y = 0.6 * x + rng.normal(scale=0.9, size=60)
+    X = np.c_[np.ones(60), x]
+    tau, sigma = 0.5, 0.9
+    post = SD.bayes_linear(X, y, [0, 0], [1e6, tau], sigma)
+    ridge = Ridge(alpha=sigma ** 2 / tau ** 2, fit_intercept=True).fit(x[:, None], y)
+    assert abs(post["mean"][1] - ridge.coef_[0]) < 1e-3
+    sd_small = np.sqrt(SD.bayes_linear(X[:10], y[:10], [0, 0], [1, 1], sigma)["cov"][1, 1])
+    sd_big = np.sqrt(SD.bayes_linear(X, y, [0, 0], [1, 1], sigma)["cov"][1, 1])
+    assert sd_big < sd_small
+    mu, sd = SD.predict_bayes_linear(post, X[:3])
+    assert mu.shape == (3,) and np.all(sd >= sigma)
+
+
+def test_p3c_has_four_challengers_with_boosting():
+    from academy import smalldata as SD
+    assert SD.CHALLENGERS == ("bayes", "gam", "survival", "boost")
+    assert abs(SD.BOOT_ALPHA - 0.05 / 4) < 1e-12
+    assert "boost" in SD.NAMES
 
 
 def test_forward_freeze_verify_and_window_trap():

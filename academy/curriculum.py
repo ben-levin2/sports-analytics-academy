@@ -1,4 +1,4 @@
-"""The six levels and 36 tracked concepts, plus helpers that combine content with progress.
+"""The six levels and 39 tracked concepts, plus helpers that combine content with progress.
 
 Two separate measures:
 - Lesson completion  = your BEST quiz score on a lesson (>= 70% completed, >= 90% mastered).
@@ -70,6 +70,10 @@ CONCEPTS = (
     _C(34, "preregistered-bar", "Write the bar before you look", 6, "Fix the pass bar (gain, uncertainty, calibration) before seeing results; stricter when testing more models."),
     _C(35, "strong-baselines", "Weak baselines make fake wins", 3, "Judge a model against the best simple baseline, not the easiest one."),
     _C(36, "forward-tests", "Forward tests", 3, "Freeze predictions with a hash before outcomes exist, then score them with a plan written in advance."),
+    # Classic methods added later
+    _C(37, "lasso", "Lasso (L1) and input selection", 1, "A penalty that shrinks weak slopes to exactly zero, so the model keeps only what the data supports."),
+    _C(38, "bayesian-linear", "Bayesian linear regression", 1, "The exact case: priors, data and a posterior you can write down, with honest uncertainty."),
+    _C(39, "gradient-boosting", "Gradient boosting (XGBoost-style)", 3, "Many small trees added in sequence: powerful with lots of data, a trap with little."),
 )
 CONCEPT_BY_ID = {c.id: c for c in CONCEPTS}
 
@@ -96,6 +100,9 @@ COMPARISONS = (
     ("Weak vs strong simple baselines", 3, "L3.11"),
     ("Backtests vs frozen forward tests", 3, "L3.12"),
     ("A bar written first vs a bar moved after looking", 6, "L6.3"),
+    ("Lasso vs ridge: dropping vs shrinking inputs", 1, "L1.9"),
+    ("Least squares vs Bayesian linear regression with little data", 1, "L1.10"),
+    ("Boosted trees vs logistic and Bayesian models on small data", 3, "L3.13"),
 )
 
 

@@ -9,7 +9,7 @@ import json
 from .. import data, forward as F, smalldata as SD, theme as T, ui
 from .p3_level3 import _load, _log, _reliability
 
-COLORS = {"plain": T.FAINT, "bayes": T.PRIMARY, "gam": T.ACCENT, "survival": T.NEUTRAL_LIGHT,
+COLORS = {"plain": T.FAINT, "bayes": T.PRIMARY, "gam": T.ACCENT, "survival": T.NEUTRAL_LIGHT, "boost": T.MUTED,
           "rating_only": T.PRIMARY_DARK}
 
 
@@ -180,7 +180,7 @@ def _backtest(project):
                 f"(AUC {res['summary'].loc['rating_only', 'auc']:.3f}). Gains below are measured against it.")
     _summary_table(res)
     st.caption(f"{res['n_classes']} test classes, {res['n_test']} recruits, {res['n_drafted']} drafted. "
-               f"Three challengers are tested, so the bootstrap bar is split three ways ({SD.BOOT_ALPHA:.2%} each).")
+               f"{len(SD.CHALLENGERS)} challengers are tested, so the bootstrap bar is split {len(SD.CHALLENGERS)} ways ({SD.BOOT_ALPHA:.2%} each).")
     tabs = st.tabs([SD.NAMES[m] for m in SD.CHALLENGERS])
     for tab, m in zip(tabs, SD.CHALLENGERS):
         with tab:

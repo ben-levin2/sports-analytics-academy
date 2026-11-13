@@ -216,7 +216,7 @@ And if you test **many** challengers, some will look good by luck. The fix is a 
 - Each challenger's bootstrap check uses $\\alpha/k$, a lower quantile, so a stricter bound
 - Then the chance that *any* no-better model passes stays at about $\\alpha$ or less
 """,
-            "The P3C project tests 3 challengers, so each uses 0.05 / 3 ≈ 1.67%.",
+            "The P3C project tests 4 challengers, so each uses 0.05 / 4 = 1.25%.",
         ),
     ],
     code=CODE,
@@ -235,7 +235,7 @@ And if you test **many** challengers, some will look good by luck. The fix is a 
     psfal="""
 **The academy is separate from PSFAL; this lesson uses simulated data only.**
 
-The general habit: write the bar (minimum gain over the strongest simple baseline, an uncertainty check that stays above zero, a calibration limit) before scoring, and tighten the uncertainty check when you test several challengers. Every Production Candidate tab in the academy has its gates fixed in code before any data is scored; P3C splits its bootstrap check across its 3 challengers.
+The general habit: write the bar (minimum gain over the strongest simple baseline, an uncertainty check that stays above zero, a calibration limit) before scoring, and tighten the uncertainty check when you test several challengers. Every Production Candidate tab in the academy has its gates fixed in code before any data is scored; P3C splits its bootstrap check across its 4 challengers.
 """,
     quiz=[
         Question(

@@ -204,7 +204,7 @@ PROJECTS = [
 - **Your rule, built in:** the baseline, metric, priors and thresholds are fixed in code before any data is scored, and simulated data never passes.
 """,
         learning=Track(
-            summary="Four models compete on simulated draft classes: a plain logistic baseline, a Bayesian logistic with informative priors, a monotonic GAM and a discrete-time survival model. See each one's gain, calibration, and when it fails.",
+            summary="Five models compete on simulated draft classes: a plain logistic baseline, a Bayesian logistic with informative priors, a monotonic GAM, a discrete-time survival model and gradient boosting. See each one's gain, calibration, and when it fails.",
             steps=["Run the competition at the default size (22 recruits a class).",
                    "Read the calibration chart for the model with the biggest gain.",
                    "Compare each model's year-1 curve with the simulated truth.",
