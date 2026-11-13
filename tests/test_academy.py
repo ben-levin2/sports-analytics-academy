@@ -23,8 +23,8 @@ from academy.runner import run_code  # noqa: E402
 # ---------------------------------------------------------------- curriculum integrity
 def test_28_concepts_six_levels():
     nums = sorted(c.num for c in curriculum.CONCEPTS)
-    assert nums == list(range(1, 40))                     # original 28, small-data 29-33, honest evaluation 34-36, classic 37-39
-    assert len(curriculum.CONCEPT_BY_ID) == 39
+    assert nums == list(range(1, 41))                     # original 28, small-data 29-33, honest evaluation 34-36, classic 37-40
+    assert len(curriculum.CONCEPT_BY_ID) == 40
     assert [c.num for c in curriculum.CONCEPTS[:28]] == list(range(1, 29))   # originals unchanged, in order
     assert {c.level for c in curriculum.CONCEPTS} == {1, 2, 3, 4, 5, 6}
     assert len(curriculum.LEVELS) == 6
@@ -506,7 +506,7 @@ def test_original_33_concepts_unchanged_and_in_order():
     first = curriculum.CONCEPTS[:33]
     assert [c.id for c in first] == ORIGINAL_33
     assert [c.num for c in first] == list(range(1, 34))
-    assert [c.num for c in curriculum.CONCEPTS[33:]] == [34, 35, 36, 37, 38, 39]
+    assert [c.num for c in curriculum.CONCEPTS[33:]] == [34, 35, 36, 37, 38, 39, 40]
 
 
 def test_honest_evaluation_lessons():
@@ -518,13 +518,14 @@ def test_honest_evaluation_lessons():
         assert l.level == level and l.concept_ids == [cid]
         assert len(l.quiz) == 5 and all(l.question_concept(q) == cid for q in l.quiz)
         assert "PSFAL" not in l.sports and "Model 8" not in l.sports + l.psfal and "Model 9" not in l.sports + l.psfal
-    assert len(all_lessons()) == 43
+    assert len(all_lessons()) == 44
 
 
 def test_classic_method_lessons():
     by_id = {l.id: l for l in all_lessons()}
     want = {"l1-09-lasso": ("lasso", 1), "l1-10-bayesian-linear": ("bayesian-linear", 1),
-            "l3-13-gradient-boosting": ("gradient-boosting", 3)}
+            "l3-13-gradient-boosting": ("gradient-boosting", 3),
+            "l3-14-tuning-without-cheating": ("tuning-cv", 3)}
     for lid, (cid, level) in want.items():
         l = by_id[lid]
         assert l.level == level and l.concept_ids == [cid]
@@ -614,3 +615,17 @@ def test_p3c_forward_tab_renders():
     at.button(key="p3c_fwd_go").click().run()
     assert not at.exception
     assert any(m.label == "AUC (scored)" for m in at.metric)
+
+
+def test_tuning_lesson_nested_cv_is_less_optimistic_than_plain_cv():
+    import importlib.util
+    from academy.lessons import l3_14_tuning_without_cheating as L
+    ns = {}
+    exec(L.CODE.split("# Part 1")[0], ns)                       # helper functions only
+    X, y, years, Xt, yt = ns["load"](1)
+    make, grid = ns["ridge"], [0.1, 1, 10]
+    plain = max(ns["rolling_cv"](make, s, X, y, years, first=2010) for s in grid)
+    nested = ns["nested_cv"](make, grid, X, y, years)
+    assert 0.5 < nested <= 1 and 0.5 < plain <= 1
+    folds = [k for k in range(2010, 2014) if y[years == k].sum()]
+    assert folds and years.max() == 2013 and years.min() == 2008   # rolling-origin only ever uses earlier classes
