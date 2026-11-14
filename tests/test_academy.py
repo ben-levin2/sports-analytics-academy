@@ -23,8 +23,8 @@ from academy.runner import run_code  # noqa: E402
 # ---------------------------------------------------------------- curriculum integrity
 def test_28_concepts_six_levels():
     nums = sorted(c.num for c in curriculum.CONCEPTS)
-    assert nums == list(range(1, 41))                     # original 28, small-data 29-33, honest evaluation 34-36, classic 37-40
-    assert len(curriculum.CONCEPT_BY_ID) == 40
+    assert nums == list(range(1, 42))                     # original 28, small-data 29-33, honest evaluation 34-36, classic 37-41
+    assert len(curriculum.CONCEPT_BY_ID) == 41
     assert [c.num for c in curriculum.CONCEPTS[:28]] == list(range(1, 29))   # originals unchanged, in order
     assert {c.level for c in curriculum.CONCEPTS} == {1, 2, 3, 4, 5, 6}
     assert len(curriculum.LEVELS) == 6
@@ -506,7 +506,7 @@ def test_original_33_concepts_unchanged_and_in_order():
     first = curriculum.CONCEPTS[:33]
     assert [c.id for c in first] == ORIGINAL_33
     assert [c.num for c in first] == list(range(1, 34))
-    assert [c.num for c in curriculum.CONCEPTS[33:]] == [34, 35, 36, 37, 38, 39, 40]
+    assert [c.num for c in curriculum.CONCEPTS[33:]] == [34, 35, 36, 37, 38, 39, 40, 41]
 
 
 def test_honest_evaluation_lessons():
@@ -518,14 +518,15 @@ def test_honest_evaluation_lessons():
         assert l.level == level and l.concept_ids == [cid]
         assert len(l.quiz) == 5 and all(l.question_concept(q) == cid for q in l.quiz)
         assert "PSFAL" not in l.sports and "Model 8" not in l.sports + l.psfal and "Model 9" not in l.sports + l.psfal
-    assert len(all_lessons()) == 44
+    assert len(all_lessons()) == 45
 
 
 def test_classic_method_lessons():
     by_id = {l.id: l for l in all_lessons()}
     want = {"l1-09-lasso": ("lasso", 1), "l1-10-bayesian-linear": ("bayesian-linear", 1),
             "l3-13-gradient-boosting": ("gradient-boosting", 3),
-            "l3-14-tuning-without-cheating": ("tuning-cv", 3)}
+            "l3-14-tuning-without-cheating": ("tuning-cv", 3),
+            "l1-11-gamma-poisson": ("gamma-poisson", 1)}
     for lid, (cid, level) in want.items():
         l = by_id[lid]
         assert l.level == level and l.concept_ids == [cid]
@@ -629,3 +630,21 @@ def test_tuning_lesson_nested_cv_is_less_optimistic_than_plain_cv():
     assert 0.5 < nested <= 1 and 0.5 < plain <= 1
     folds = [k for k in range(2010, 2014) if y[years == k].sum()]
     assert folds and years.max() == 2013 and years.min() == 2008   # rolling-origin only ever uses earlier classes
+
+
+def test_gamma_poisson_lesson_numbers_and_wiring():
+    from scipy import stats
+    from academy.lessons import l1_11_gamma_poisson as L
+    l = L.LESSON
+    assert l.level == 1 and l.order == 11 and l.concept_ids == ["gamma-poisson"] and len(l.quiz) == 5
+    assert {q.kind for q in l.quiz} >= {"mc", "numeric", "short"}
+    a0, b0 = 0.065 * 150, 150
+    assert abs((a0 + 3) / (b0 + 15) * 100 - 7.727) < 0.01 and abs((a0 + 120) / (b0 + 700) * 100 - 15.265) < 0.01
+    assert abs(b0 / (b0 + 15) - 0.909) < 0.001 and abs(b0 / (b0 + 700) - 0.176) < 0.001
+    q2 = [q for q in l.quiz if q.kind == "numeric"][0]
+    assert abs(q2.answer - (8 + 5) / (100 + 40) * 100) < 0.01
+    # posterior mean is exactly the weighted average of prior mean and raw rate
+    post = stats.gamma(a0 + 3, scale=1 / (b0 + 15)).mean()
+    assert abs(post - (b0 / (b0 + 15) * 0.065 + 15 / (b0 + 15) * 3 / 15)) < 1e-12
+    assert "PSFAL" not in l.sports and "Koby" not in l.psfal and "Bryson" not in l.psfal
+    assert "Simulated" in l.sports

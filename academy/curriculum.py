@@ -1,4 +1,4 @@
-"""The six levels and 40 tracked concepts, plus helpers that combine content with progress.
+"""The six levels and 41 tracked concepts, plus helpers that combine content with progress.
 
 Two separate measures:
 - Lesson completion  = your BEST quiz score on a lesson (>= 70% completed, >= 90% mastered).
@@ -75,6 +75,7 @@ CONCEPTS = (
     _C(38, "bayesian-linear", "Bayesian linear regression", 1, "The exact case: priors, data and a posterior you can write down, with honest uncertainty."),
     _C(39, "gradient-boosting", "Gradient boosting (XGBoost-style)", 3, "Many small trees added in sequence: powerful with lots of data, a trap with little."),
     _C(40, "tuning-cv", "Tuning without cheating (nested CV)", 3, "Choose settings inside the training classes, touch the test set once, and score the whole pipeline with nested cross-validation."),
+    _C(41, "gamma-poisson", "Gamma-Poisson: shrinking counts over exposure", 1, "The L1.1 recipe for events over snaps or targets: add events to a, exposure to b, and the rate is shrunk toward the average."),
 )
 CONCEPT_BY_ID = {c.id: c for c in CONCEPTS}
 
@@ -105,6 +106,7 @@ COMPARISONS = (
     ("Least squares vs Bayesian linear regression with little data", 1, "L1.10"),
     ("Boosted trees vs logistic and Bayesian models on small data", 3, "L3.13"),
     ("Peeking at the test set vs cross-validation vs nested CV", 3, "L3.14"),
+    ("Beta-Binomial (yes/no) vs Gamma-Poisson (counts over exposure)", 1, "L1.11"),
 )
 
 
